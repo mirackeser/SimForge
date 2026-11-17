@@ -1,153 +1,98 @@
-# SimForge — Advanced Real-Time 3D Physics Sandbox (C++17)
+# SimForge — 3D Physics Sandbox
 
-**SimForge** is a high-performance, real-time 3D rigid-body physics engine and sandbox written from scratch in **C++17**. It mirrors modern production simulation and VR engine architectures: deterministic sub-stepping, 3D rotational dynamics with inertia tensors, Coulomb friction, Oriented Bounding Box (OBB) Separating Axis Theorem (SAT) collision, constraint solving (distance/spring joints), uniform spatial hash broad-phase acceleration, interactive 3D mouse spring picking, and a live Dear ImGui telemetry profiler.
+C++17 ile yazılmış küre/OBB rijit cisim simülasyonu, OpenGL masaüstü sandbox'ı ve ekransız deney çalıştırıcısı.
 
 ![SimForge Preview](docs/preview.png)
 
----
+Mevcut özellikler: quaternion açısal entegrasyon, eylemsizlik tensörleri, sphere/sphere ve sphere/OBB çarpışmaları, 15 eksenli OBB SAT, Coulomb sürtünmesi, mesafe/yay kısıtları, spatial hash broadphase, mouse spring ile seçim ve ImGui profiler. OBB temas çözümü tek nokta yaklaşımıdır; üretim motoru doğruluğu veya platformlar arasında bit düzeyinde determinism iddiası yoktur.
 
-## 🌟 Key Engineering Highlights (CV / Portfolio Differentiators)
+**AI durumu:** Henüz model/ajan entegrasyonu yoktur. SimForge AI deney asistanına giden geliştirme aşamaları [yol haritasında](docs/ROADMAP.md) tanımlıdır.
 
-### 1. Physics Engine Architecture
-- **Full 3D Rotational Dynamics**: Rigid bodies have analytic 3D inertia tensors ($I_{body}$ and $I_{world} = R \cdot I_{body} \cdot R^T$) for spheres and cuboids. Numerical integration of angular velocity with quaternion orientation updates ($\dot{q} = \frac{1}{2} \omega q$).
-- **Coulomb Friction Model**: Resolves both static and dynamic friction impulses along collision tangent planes, clamped according to Coulomb's law ($|J_t| \le \mu |J_n|$), preventing unrealistic sliding and enabling stable stacking and domino toppling.
-- **OBB–OBB Collision via Separating Axis Theorem (SAT)**: Evaluates 15 potential separating axes (3 of A, 3 of B, 9 edge cross-products) to compute minimal penetration depth, contact normal, and support-point contact manifolds for arbitrarily rotated boxes.
-- **Sphere–OBB Narrowphase**: Transforms sphere coordinates into local box space for exact analytic closest-point and penetration depth detection.
-- **Constraint Dynamics (Joints & Springs)**: Velocity-level constraint solver with Baumgarte stabilization supporting `DistanceJoint`, `SpringJoint`, and interactive `MouseSpring`.
-- **Deterministic Fixed Timestep Loop**: Sub-stepping accumulator (120 Hz default) decoupling rendering framerate from physical simulation stability.
+## Proje belgeleri
 
-### 2. Broadphase Acceleration & Performance
-- **Uniform Grid Spatial Hash**: $O(1)$ spatial cell hashing with prime-modulo hashing (`CellKeyHash`). Accelerates broadphase pair generation from $O(N^2)$ to near-linear $O(N)$ for hundreds of concurrent colliding entities.
-- **Direct Indexing Optimization**: Zero-allocation lookup for collision pairs eliminating linear searches.
+- [Geliştirme planı, öncelikler ve kabul koşulları](docs/ROADMAP.md)
+- [Katmanlar, CMake hedefleri ve fizik tick sözleşmesi](docs/ARCHITECTURE.md)
+- [Kod incelemesi, hata bulguları ve ilk paket](docs/AUDIT.md)
+- [Doğrulama sonuçları, ölçümler ve sınırlar](docs/VALIDATION.md)
 
-### 3. Interactive Tooling & Developer Experience
-- **Interactive 3D Mouse Spring Dragging**: Screen-to-world raycasting with analytic ray-sphere and ray-OBB tests. Left-click any 3D object in the viewport to grab, drag, and fling it with a live physics spring.
-- **Live Debug Overlays**: Toggleable 3D visualizers for contact points & normals, distance/spring joint links, and active spatial hash grid cells.
-- **Microsecond Profiler Telemetry**: Real-time breakdown of CPU execution time per substep:
-  - Integration Time ($\mu s$)
-  - Broadphase Spatial Hash ($\mu s$)
-  - Narrowphase & Contact Resolution ($\mu s$)
-  - Constraint Solving ($\mu s$)
-  - Total Substep Time ($\mu s$) & Framerate Histogram
-- **Entity Inspector**: Inspect linear velocity, angular velocity, position, mass, and apply impulse kicks directly from the UI.
+## Derleme
 
----
-
-## 🛠 Tech Stack
-
-| Component | Library / Standard |
-|---|---|
-| Language | **C++17** (Standard Library, RAII, ECS architecture) |
-| Build System | **CMake 3.20+** & **Ninja** |
-| Window & Input | **GLFW 3.4** |
-| Graphics API | **OpenGL 3.3 Core** with **GLAD** loader |
-| Mathematics | **GLM 1.0.1** (Vectors, Matrices, Quaternions) |
-| Debug UI | **Dear ImGui 1.91+** |
-| Unit Testing | **GoogleTest 1.15+** |
-
-*All external libraries are fetched automatically and shallow-cloned via CMake `FetchContent`.*
-
----
-
-## 🚀 Build & Run
+CMake 3.20+, C++17 derleyicisi ve Git gerekir. CMake GLM 1.0.1, GLFW 3.4, ImGui 1.91.5 ve GoogleTest 1.15.2 bağımlılıklarını ilk kurulumda indirir. GLAD depoda bulunur.
 
 ### macOS
+
 ```bash
-# Configure with Ninja
-cmake -S . -B build -GNinja -DCMAKE_BUILD_TYPE=Release
-
-# Build executable and test suite
-ninja -C build
-
-# Run application
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel 2
 ./build/SimForge
-
-# Run unit tests
-./build/SimForgeTests
+ctest --test-dir build --output-on-failure
 ```
 
-### Windows (Visual Studio 2022 / Clang)
+### Windows — Visual Studio 2022
+
 ```powershell
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --config Release
-
-# Run
+cmake -S . -B build
+cmake --build build --config Release --parallel 2
 .\build\Release\SimForge.exe
-
-# Tests
 ctest --test-dir build -C Release --output-on-failure
 ```
 
----
+### Linux — Debian/Ubuntu
 
-## 🎮 Controls
+```bash
+sudo apt-get install cmake g++ git libx11-dev libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev libgl1-mesa-dev
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel 2
+./build/SimForge
+ctest --test-dir build --output-on-failure
+```
 
-| Input | Action |
+Linux masaüstü varsayılan olarak X11 kullanır. Wayland geliştirme bağımlılıkları kuruluysa `-DSIMFORGE_ENABLE_WAYLAND=ON` ile Wayland desteği de açılır.
+
+### Ekransız derleme ve deney
+
+Pencere sistemi veya OpenGL geliştirme paketleri gerektirmez:
+
+```bash
+cmake -S . -B build/headless -DSIMFORGE_BUILD_SANDBOX=OFF -DCMAKE_BUILD_TYPE=Release
+cmake --build build/headless --parallel 2
+ctest --test-dir build/headless --output-on-failure
+./build/headless/SimForgeHeadless --scene cradle --steps 120 --csv trace.csv
+```
+
+Windows çoklu konfigürasyon derlemesinde çalıştırıcı `build\headless\Release\SimForgeHeadless.exe` altındadır. Sahne anahtarları: `domino`, `cradle`, `jenga`, `bridge`, `rain`, `stress`. `--help` seçenekleri gösterir. Adım sayısı 1–1.000.000 aralığındadır. Her adım tam bir sabit tick'tir (varsayılan 1/120 saniye). NaN/Inf fizik durumu veya dosya hatası sıfır olmayan çıkış üretir.
+
+CSV her aktif cismin tick sonu konum, hız, quaternion ve açısal hızını içerir. Aynı binary ve girdilerle fizik izleri karşılaştırılabilir; CSV tam bir sahne/replay dosyası değildir. Büyük sahnelerde çıktı boyutu ve çalışma süresi adım sayısıyla artar.
+
+| CMake seçeneği | Varsayılan | Amaç |
+|---|---|---|
+| `SIMFORGE_BUILD_SANDBOX` | `ON` | Grafik masaüstü uygulaması |
+| `SIMFORGE_BUILD_HEADLESS` | `ON` | CSV üreten ekransız çalıştırıcı |
+| `SIMFORGE_BUILD_TESTS` | `ON` | Birim/entegrasyon testleri |
+| `SIMFORGE_ENABLE_WAYLAND` | `OFF` | Linux GLFW Wayland backend'i |
+
+## Kontroller
+
+| Girdi | İşlem |
 |---|---|
-| **Left Mouse Drag (LMB)** | **Grab & Throw Objects** (Interactive 3D Mouse Spring) |
-| **Right Mouse Drag (RMB)** | **Orbit Camera** around target |
-| **`+` / `-` Keys** | Zoom camera in / out |
-| **Space** | Pause / Resume simulation |
-| **ImGui Panel** | Switch demo scenes, spawn objects, tweak physics & solver parameters |
-| **`Esc`** | Exit application |
+| Sol fare sürükleme | Cismi mouse spring ile tut/fırlat |
+| Sağ fare sürükleme | Kamerayı döndür |
+| `+` / `-` | Yakınlaş/uzaklaş |
+| `Space` | Duraklat/devam et |
+| `Step Frame` | Duraklat ve tam bir fizik tick'i çalıştır |
+| ImGui paneli | Sahne seç, sıfırla, cisim ekle, solver/sürtünme/dönüş ayarlarını değiştir |
+| `Esc` | Çıkış |
 
----
+## Örnek sahneler
 
-## 🎪 Interactive Showcase Scenes
+Domino zinciri, Newton beşiği, Jenga kulesi, asılı köprü, 180 küreli partikül yağmuru ve 36 kutu + 80 küreli karma stres sahnesi. Bunlar etkileşimli gösterimlerdir; analitik doğrulama benchmark'larının yerine geçmez.
 
-1. **Domino Chain & Towers**: 14 high-aspect dominoes with authentic rotational toppling triggered by a rolling sphere, triggering a secondary pyramid collapse.
-2. **Newton's Cradle (Constraints)**: 5 suspended steel spheres connected by rigid `DistanceJoint`s demonstrating near-perfect elastic momentum transfer.
-3. **Jenga Stacking Tower**: 10-layer interlocking wooden block tower demonstrating OBB contact stability and Coulomb static friction. Includes an interactive wrecking ball.
-4. **Suspended Rope Bridge**: Articulated wooden bridge with 10 planks connected by distance joints anchored to stone towers, with rolling spheres traversing it.
-5. **Particle Rain**: 180+ dynamic colliding spheres stress-testing spatial hash broadphase culling.
-6. **Mixed Stress Sandbox**: 36 heavy tumbling boxes and 80 spheres colliding concurrently.
+## Doğrulama
 
----
+GoogleTest testleri çarpışma, inertia, quaternion entegrasyonu, raycast, mesafe kısıtı, çift sırası ve fizik dünyasının zaman/reset/yay/ayar davranışlarını kapsar. CTest ayrıca headless CLI'nin başarılı çalışma ve geçersiz girdi yollarını kontrol eder.
 
-## 🧪 Unit Test Coverage (GoogleTest)
+GitHub Actions masaüstünü Linux/macOS/Windows üzerinde derler ve testleri çalıştırır; ek Linux işinde ekransız çekirdek AddressSanitizer/UndefinedBehaviorSanitizer ile sınanır. UI etkileşimleri için manuel masaüstü kontrolü de gerekir.
 
-The test suite (`SimForgeTests`) validates:
-1. `Collision.SphereSphereOverlap`
-2. `Collision.SphereBoxOverlap`
-3. `SpatialHash.FindsClosePair`
-4. `AdvancedPhysics.RigidBodyInertiaCalculation` (Sphere & Box tensors)
-5. `AdvancedPhysics.QuaternionAngularIntegration` (Angular momentum & orientation)
-6. `AdvancedPhysics.OBBCollisionRotatedBoxes` (45-degree SAT overlap & separation)
-7. `AdvancedPhysics.CoulombFrictionImpulse` (Static/dynamic friction clamping)
-8. `AdvancedPhysics.RaycastIntersections` (Analytic ray-sphere & ray-OBB)
-9. `AdvancedPhysics.DistanceConstraintSolvesLength` (Joint error minimization)
+## Lisans
 
----
-
-## 💼 CV / Portfolio Wording (Turkish)
-
-**SimForge — Gerçek Zamanlı 3D Fizik ve Simülasyon Motoru (C++17 / OpenGL)**  
-GitHub: `https://github.com/mirackeser/SimForge`
-
-- **Sıfırdan Fizik Motoru**: Deterministik sabit zaman adımı (fixed timestep sub-stepping), 3D eylemsizlik tensörleri (inertia tensors) ve kuaterniyon açısal dinamik entegrasyonu.
-- **İleri Seviye Çarpışma Hattı (Collision Pipeline)**: Dönen kutular için 15 eksenli OBB Ayrık Eksen Teoremi (Separating Axis Theorem - SAT), Sphere-OBB analitik testi ve Coulomb sürtünme modeli (statik & dinamik).
-- **Kısıt Çözücü (Constraint Solver)**: Mesafe (Distance Joint) ve yay (Spring Joint) kısıtları için Baumgarte stabilizasyonlu hız/konum çözücü; Newton Beşiği ve asılı halat köprü simülasyonları.
-- **Broadphase Optimizasyonu**: Uniform grid Spatial Hash ile $O(N^2)$ çarpışma testini uzamsal hücre indeksleme ile $O(N)$ seviyesine indirme; mikrosaniye hassasiyetinde profiler telemetrisi.
-- **Etkileşimli 3D Görselleştirme**: 3D Raycasting ve Mouse Spring ile nesneleri fareyle tutup fırlatabilme; temas noktaları, normaller ve spatial hash hücreleri için debug visualizer.
-- **Mühendislik Standartları**: GoogleTest ile %100 geçen birim testler, CMake FetchContent ile sıfır konfigürasyonlu çapraz platform (macOS/Windows) build mimarisi.
-
----
-
-## 🎯 Mülakat Notları & Soru-Cevap Rehberi (Interview Talking Points)
-
-Mülakatta (özellikle **Kernel Dynamics, Havok, EA, Epic Games, savunma sanayii simülasyon departmanları**) şu sorular geldiğinde projenin şu bölümlerine değinebilirsin:
-
-1. **"Dönen kutularda (OBB) çarpışmayı nasıl tespit ettin?"**
-   > *"Kutuların rotasyon matrislerinden türetilen 3 yerel eksen A, 3 yerel eksen B ve bunların 9 çapraz çarpımından (cross product) oluşan 15 potansiyel ayrık ekseni (Separating Axis Theorem) test ettim. Minimum örtüşmeye (penetration) sahip ekseni temas normali seçip destek noktaları (support points) üzerinden temas manifoldunu ürettim."*
-
-2. **"Tork ve sürtünmeyi temasta nasıl uyguladın?"**
-   > *"Temas noktasındaki kaldıraç kollarını ($r_A = P - p_A$) hesaplayarak $v_p = v + \omega \times r$ ile noktasal bağıl hızı buldum. Normal doğrultuda elastik çarpışma impulsunu, teğet doğrultuda ise bağıl kayma hızını hesaplayıp Coulomb sürtünme yasasıyla ($|J_t| \le \mu |J_n|$) kısıtlayarak açısal hıza $\Delta \omega = I^{-1}(r \times J)$ tork impulsu olarak uyguladım."*
-
-3. **"Geniş faz (Broadphase) algoritmanı nasıl tasarladın?"**
-   > *"Uzayı hücrelere bölen bir Spatial Hash tablosu kullandım. $x, y, z$ hücre koordinatlarını büyük asal sayılarla modülo ederek hash tablosuna ekledim. Böylece $O(N^2)$ yerine sadece aynı ve komşu hücredeki nesneler kontrol edildi."*
-
----
-
-## 📄 Lisans
-
-MIT — Detaylar için [LICENSE](LICENSE) dosyasına bakabilirsiniz.
+[MIT](LICENSE).
