@@ -1,4 +1,45 @@
-# İlk paket doğrulaması
+# Güncel doğrulama — fizik ve görsel stüdyo
+
+17 Kasım 2026; Linux x86_64, GCC 14.2, CMake 4.4.5.
+
+| Kontrol | Gözlenen sonuç | Kapsam / sınır |
+|---|---|---|
+| Release CTest | 37/37 geçti | 35 GoogleTest + 2 CLI kontrolü |
+| Debug ASan + UBSan | 37/37 geçti | Yerel ptrace ortamı nedeniyle leak taraması kapalı; CI sanitizer işi bu ayarı kullanmaz |
+| Sahne koşumları | Studio dahil 7 sahne × 600 tick, çıkış 0 | NaN/Inf kontrolü; her sahnenin fiziksel doğruluk kanıtı değildir |
+| Gerçek OpenGL render | Mesa yazılım bağlamında shader/FBO/ImGui/sahne çalıştı; `GL error=0` | 1600×900, 45 tick; aynı Application/Renderer kodu; GPU sürücülerinin tamamını kapsamaz |
+| Önizleme | `docs/preview.png` gerçek capture'dan üretildi | Yapay referans görsel kaldırıldı; offline capture FPS göstermez |
+| Biçim / derleyici | clang-format kontrolü ve proje uyarı bayraklarıyla derleme geçti | Vendor kaynakları biçim değişikliğinin dışında |
+
+## Fizik referansları
+
+- Serbest düşme: 120 Hz, 1 saniye; analitik hız için 0.0001 m/s, semi-implicit konum için 0.042 m tolerans. Konum hatası sıfır değildir.
+- İki eş kütleli küre: yerçekimi/damping/sürtünme kapalı, restitution 1; başlangıç hızları +2 ve -1 m/s. Son hızlar -1 ve +2, momentum ve kinetik enerji 1e-5 toleransla korunuyor.
+- Duran kutu: 2 saniyede yükseklik 0.005 m içinde, yapay spin 0.01 rad/s altında.
+- Üç kutu istifi: **20 velocity iterasyonu**, 3 saniye; yükseklik toleransları 0.03/0.04/0.06 m. Bu kısa referans, uzun Jenga istifinin her koşulda kararlı olduğunu göstermez.
+- Üstel damping: 60 ve 120 Hz'de 1 saniye sonu hızları 1e-4 toleransla eşleşiyor.
+- Kutunun büyük zeminle temasında yüz noktaları gerçek örtüşme bölgesinde kalıyor.
+
+## Sınır testleri
+
+Geçersiz broadphase bounds/index, eski entity handle, sıfır/negatif collider boyutu, içerden başlayan veya sıfır yönlü ray, NaN joint ve solver kapasitesini aşan manifold testleri var. Bunlar bağımsız güvenlik sertifikasyonu değildir; ayrıntılı sözleşmeler [QUALITY.md](QUALITY.md) içinde.
+
+## Tekrar üretme
+
+```bash
+cmake -S . -B build/headless -DSIMFORGE_BUILD_SANDBOX=OFF -DCMAKE_BUILD_TYPE=Release
+cmake --build build/headless --parallel 2
+ctest --test-dir build/headless --output-on-failure --no-tests=error
+./build/headless/SimForgeHeadless --scene studio --steps 600 --csv build/studio.csv
+# Masaüstü derlemesi, OpenGL bağlamı gerekir:
+./build/SimForgePreview build/preview.ppm
+```
+
+GitHub CI ayrıca Linux'ta Xvfb altında gerçek `SimForgePreview` çalıştırır ve görüntüyü artifact olarak saklar. Platform sonuçları [Actions](https://github.com/mirackeser/SimForge/actions) sayfasındadır. Gerçek kullanıcı etkileşimi, Retina girdi eşlemesi ve donanım sürücüleri için cihaz üstünde manuel kontrol hâlâ gerekir.
+
+---
+
+## Tarihsel ilk paket doğrulaması
 
 Tarih: 17 Kasım 2026. Yerel ortam: Linux x86_64, GCC 14.2, CMake 4.4.5, C++17.
 

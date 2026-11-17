@@ -1,48 +1,32 @@
 # SimForge geliştirme planı
 
-İnceleme tarihi: 17 Kasım 2026. Başlangıç: `304ee95`.
+Güncelleme: 17 Kasım 2026. Öncelik: gerçekçi fizik, gerçek render çıktısı, anlaşılır C++ ve denetlenebilir davranış.
 
-## Ürün hedefi ve kapsam
+## Aşamalar
 
-SimForge bugün C++17 ile yazılmış, küre ve OBB rijit cisimlerini çalıştıran bir masaüstü fizik sandbox'ıdır. AI modeli, ajan orkestrasyonu veya doğal dil arayüzü henüz yoktur. İlk hedef: davranışı ölçülebilen, ekransız da çalışabilen, test edilmiş bir simülasyon çekirdeği. Sonraki hedef: kullanıcının fizik deneyini tanımladığı, sistemin güvenli bir sahne önerdiği ve sonuçları ölçümlerle açıkladığı **SimForge AI deney asistanı**.
-
-Başarı ölçütü özellik sayısı değil; aynı deneyin yeniden çalıştırılabilmesi, fizik hatalarının yakalanması ve AI açıklamalarının gerçek simülasyon verileriyle desteklenmesidir.
-
-## Aşamalar ve kabul koşulları
-
-| Aşama | Durum | Teslimat | Kabul koşulu |
+| Aşama | Durum | Yapılan / kalan iş | Kabul koşulu |
 |---|---|---|---|
-| M1 — Güvenilir çekirdek | İlk paket uygulandı | Grafiklerden bağımsız `SimForgePhysics`, ekransız runner, çarpışma/zaman/yay düzeltmeleri, regresyon testleri, CI düzeltmeleri | Ekransız configure/build/test geçer; masaüstü üç platformda CI ile doğrulanır; zemindeki küre dışarı itilir; yay kuvveti iterasyon sayısıyla katlanmaz |
-| M2 — Deney ve veri altyapısı | Başladı: sabit tick + CSV | Sürümlü sahne JSON şeması, seed, ayar anlık görüntüsü, kayıt/yükleme, deney manifesti | Kaydet/yükle eşdeğerliği; bozuk veri reddi; aynı binary ve girdilerle aynı iz; platformlar arası karşılaştırmada tanımlı tolerans |
-| M3 — Fizik doğruluğu ve performans | Planlandı | Referans deneyler, çok noktalı OBB temasları, warm starting, zaman ölçekli damping, statik geometri optimizasyonu | Serbest düşme ve elastik çarpışmada analitik referans; istif sapması ve joint hatası raporu; 100/500/1000 cisimde ölçülmüş broadphase/solver maliyeti |
-| M4 — Deney çalışma alanı | Planlandı | Sahne editörü, undo/redo, seçili nesne parametreleri, deney karşılaştırması, grafikler | Kullanıcı bir deney oluşturur, kaydeder, yeniden açar ve iki koşulu karşılaştırır; Retina/picking ve duraklatma manuel kontrol edilir |
-| M5 — AI deney asistanı | Planlandı; M2/M3'e bağlı | Doğal dil -> doğrulanan deney önerisi; ölçümlere dayalı açıklama; sağlayıcıdan bağımsız model arabirimi | AI yalnızca tipli/sınırlı komut önerir; uygulamadan önce önizleme; belirsizlik belirtilir; hatalı şema/taşma/uydurulmuş ölçüm testleri geçer |
-| M6 — Portföy sürümü | Planlandı | Paketlenmiş macOS/Windows/Linux sürümleri, örnek deneyler, kısa demo, benchmark ve teknik rapor | Temiz makinede kurulum; artifact kontrolleri; sürüm notları ve tekrar üretme komutları; doğrulanmış özelliklerle README |
+| M1 — Çekirdek | Uygulandı | Grafiklerden ayrı fizik kütüphanesi, sabit tick, reset, ekransız runner | Üç platformda derleme/test; headless sanitizer |
+| M2 — Fizik doğruluğu | Temeli uygulandı | Çok noktalı OBB yüzleri, kenar teması, birikimli impuls, saniye bazlı damping; sırada CCD ve tickler arası warm starting | Serbest düşme, momentum/enerji, duran kutu, istif ve damping referansları; hızlı cisimlerde tunneling testi sonraki iş |
+| M3 — Görsel stüdyo | Temeli uygulandı | GGX malzemeler, gölge, taş/ahşap, metal küreler, sahne ve sağ panel; sırada daha ayrıntılı geometri ve aydınlatma | Gerçek motor görüntüsü, gerçek shader/GL çalışması; farklı cihazlarda görünüm ve hız kontrolü |
+| M4 — Deney verisi | Başladı | CSV var; sahne JSON, sürümlü manifest, kayıt/yükleme ve deney karşılaştırması bekliyor | Kaydet/yükle eşdeğerliği, bozuk veri reddi, aynı binary/ayarlarla yeniden üretim |
+| M5 — Sağlamlık ve performans | Temeli uygulandı | Sayısal doğrulama, hücre/çift/çizgi bütçeleri, stale handle koruması, sabit SHA bağımlılıklar; sırada otomatik statik analiz ve daha kapsamlı fuzz/ölçek testleri | Sınır testleri, sanitizer, temiz uyarı derlemesi; 100/500/1000 cisim için medyan/p95 ölçümü |
+| M6 — Dağıtım | Planlandı | macOS/Windows/Linux paketleri, demo videosu, sürüm notları | Temiz cihazda açılış/kapanış, sürücü/Retina kontrolleri, tekrarlanabilir artifact |
 
-## Sıradaki iş paketi: M2
+## Sıradaki öncelikler
 
-1. **Sahne sözleşmesi:** `schemaVersion`, entity kimliği, transform, collider, rigid body, joint, solver ayarı, seed. Geçersiz sayıları, kütleyi ve collider boyutlarını dosya sınırında reddet.
-2. **Deney manifesti:** commit, derleyici/platform, timestep, iterasyon, sahne/seed ve çıktı şeması. CSV tek başına tam replay kaydı sayılmaz.
-3. **Scene I/O:** geçici dünya üzerinde doğrula; yalnızca başarılıysa aktif sahneyle değiştir. Yuvarlak dönüş ve bozuk dosya testlerini ekle.
-4. **Runner genişletmesi:** `--scene-file`, `--seed`, `--manifest`, deterministik checksum; çekirdekte AI/ağ bağımlılığı oluşturma.
-5. **Referans deneyler:** serbest düşme, tek küre/zemin, iki küre momentumu, sarkaç. Konum/hız/enerji ve joint uzunluk hatası için ölçütleri tanımla.
+1. **Hızlı cisimler:** swept sphere/TOI tabanlı CCD; duvarı bir tick içinde geçen cisim için regresyon.
+2. **İstif ve sürtünme:** kalıcı contact anahtarları ve tickler arası warm starting; uzun süreli yatay sapma, tilt ve penetration ölçümleri.
+3. **Joint doğruluğu:** açısal konum düzeltmesi ve enerji/joint uzunluğu hata raporları; daha sert yaylar için kararlı soft constraint formülasyonu.
+4. **Görsel kalite:** gerçek kenar pahları, daha ayrıntılı köprü/çerçeve geometrisi, çevre haritası ve daha yumuşak alan ışığı/gölge yaklaşımı. Referans görsel kalite hedefidir; tamamlanmış özelliklerin ekran görüntüsü değildir.
+5. **Deney formatı:** şema sürümü, solver/seed/platform/commit metadata, geçici dünyada doğrulayıp atomik sahne değişimi.
 
-## Teknik borç ve risk sırası
+## Fizik ve güvenlik sınırları
 
-- **P1: OBB temasları.** Şu an tek temas noktası yaklaşımı kullanılır. Jenga gibi istiflerde doğruluk/stabilite kanıtlanmış değildir. Çok noktalı manifold ve accumulated impulse tasarımı birlikte ele alınmalı.
-- **P2: Büyük statik geometri.** İlk pakette OBB dünya AABB'siyle grid yerleştirmesi eklendi. Daha büyük/sınırsız sahneler için statik broadphase ayrımı ve hücre bütçesi hâlâ değerlendirilmelidir.
-- **P1: Kimlik yaşam döngüsü.** `World::clear()` kimlikleri yeniden kullanır; dış handle ve uzun süreli deney referansları için generation/index yapısı gerekir. `entitiesMutable()` invalidasyon kuralları açıkça tanımlanmalı.
-- **P2: Damping.** Mevcut damping substep başına çarpandır; timestep değiştirilince fiziksel sönüm değişir. Saniye bazlı model ve sürüm geçişi tasarlanmalı.
-- **P2: Ray başlangıcı.** Collider içinden başlayan raylerin normal/mesafe sözleşmesi belirlenip uç durumlar test edilmeli.
-- **P2: Grafik kaynakları.** Başlatma hatası ve kapanışta shader/context yaşam döngüsü, küçültülmüş pencere ve giriş yakalama akışı için masaüstü testleri tamamlanmalı.
-- **AI kapsam riski.** Önce deney sözleşmesi ve ölçüm, sonra model. AI'nin keyfi C++/Python üretip çalıştırmasına dayanan bir yol kullanılmayacak. Model fizik çözücünün yerini almayacak.
+Mevcut motor ayrık zamanlıdır; büyük hızlarda CCD olmadan tunneling olabilir. Manifold/impulslar henüz tickler arasında taşınmaz. Temas konum düzeltmesi açısal değildir ve joint çözümü yaklaşık stabilizasyon kullanır. Enerji korunumu tüm sahneler için garanti edilmez. Bu sınırlar referans deneylerle ayrı ayrı azaltılacak.
 
-## Çalışma ve GitHub ilerleme düzeni
+Kalite kontrolleri ve uygulanan kaynak sınırları [QUALITY.md](QUALITY.md), gözlenen test/render sonuçları [VALIDATION.md](VALIDATION.md) içinde tutulur. AI/LLM entegrasyonu mevcut uygulama kapsamına dahil değildir.
 
-Her paket: bulgu -> kabul koşulu -> uygulama -> ilgili testler -> diff kontrolü -> commit/push -> CI sonucu. Bir sonraki paket bu dosyadaki durumları günceller. `main` geçmişi yeniden yazılmaz; eşzamanlı uzak değişiklikler varsa önce incelenir. CI başarısızsa bir sonraki özellikten önce neden düzeltilir. Model/API anahtarı gerektiren gelecekteki AI entegrasyonunda gizli değerler depoya yazılmaz.
+## İlerleme düzeni
 
-Yerel doğrulama sonuçları ve ölçüm sınırları [VALIDATION.md](VALIDATION.md) dosyasındadır.
-
-## Bu paketin doğrulama sınırı
-
-Birim ve entegrasyon testleri hedefli davranışları ölçer; üretim motoru doğruluğu veya platformlar arasında bit düzeyinde deterministik sonuç garantisi vermez. Ekransız aynı-binary tekrar testi fizik çıktısına uygulanır; duvar saati profiler süreleri karşılaştırma verisine dahil edilmez. AI aşamaları tasarımdır ve henüz uygulanmamıştır.
+Bulgu -> kabul koşulu -> uygulama -> ilgili test/gerçek render -> diff/format kontrolü -> commit/push -> CI. `main` geçmişi yeniden yazılmaz. Yeni özellikten önce başarısız doğrulama düzeltilir. Doğrulanmamış performans, gerçekçilik veya güvenlik iddiası README'ye eklenmez.

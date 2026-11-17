@@ -4,9 +4,9 @@ C++17 ile yazılmış küre/OBB rijit cisim simülasyonu, OpenGL masaüstü sand
 
 ![SimForge Preview](docs/preview.png)
 
-Mevcut özellikler: quaternion açısal entegrasyon, eylemsizlik tensörleri, sphere/sphere ve sphere/OBB çarpışmaları, 15 eksenli OBB SAT, Coulomb sürtünmesi, mesafe/yay kısıtları, spatial hash broadphase, mouse spring ile seçim ve ImGui profiler. OBB temas çözümü tek nokta yaklaşımıdır; üretim motoru doğruluğu veya platformlar arasında bit düzeyinde determinism iddiası yoktur.
+Mevcut özellikler: quaternion açısal entegrasyon, eylemsizlik tensörleri, sphere/sphere ve sphere/OBB çarpışmaları, 15 eksenli OBB SAT, Coulomb sürtünmesi, mesafe/yay kısıtları, spatial hash broadphase, mouse spring ile seçim ve ImGui profiler. OBB yüz temasları kırpılmış çok noktalı manifoldlarla, kenar temasları en yakın segment noktalarıyla çözülür. Impulslar bir tick içindeki iterasyonlarda biriktirilir. Sürekli çarpışma tespiti (CCD) ve tickler arası warm starting henüz yoktur.
 
-**AI durumu:** Henüz model/ajan entegrasyonu yoktur. SimForge AI deney asistanına giden geliştirme aşamaları [yol haritasında](docs/ROADMAP.md) tanımlıdır.
+**Görsel katman:** GGX metal/pürüzlülük malzemeleri, analitik stüdyo yansımaları, 2048×2048 PCF gölgeler, prosedürel taş/ahşap yüzeyler ve gerçek konumlardan çizilen hareket izleri. Varsayılan Physics Studio sahnesi Newton beşiği, köprü, domino ve metal küreleri bir arada çalıştırır. Yukarıdaki görsel gerçek OpenGL çıktısıdır; uygulamanın kendi arayüzüyle 45 fizik tick'i sonunda alınmıştır.
 
 ## Proje belgeleri
 
@@ -14,10 +14,11 @@ Mevcut özellikler: quaternion açısal entegrasyon, eylemsizlik tensörleri, sp
 - [Katmanlar, CMake hedefleri ve fizik tick sözleşmesi](docs/ARCHITECTURE.md)
 - [Kod incelemesi, hata bulguları ve ilk paket](docs/AUDIT.md)
 - [Doğrulama sonuçları, ölçümler ve sınırlar](docs/VALIDATION.md)
+- [Kod kalitesi, güvenlik sınırları ve fizik sözleşmeleri](docs/QUALITY.md)
 
 ## Derleme
 
-CMake 3.20+, C++17 derleyicisi ve Git gerekir. CMake GLM 1.0.1, GLFW 3.4, ImGui 1.91.5 ve GoogleTest 1.15.2 bağımlılıklarını ilk kurulumda indirir. GLAD depoda bulunur.
+CMake 3.20+, C++17 derleyicisi ve Git gerekir. CMake GLM 1.0.1, GLFW 3.4, ImGui 1.91.5 ve GoogleTest 1.15.2 kaynaklarını ilk kurulumda değişmez commit SHA'larıyla indirir. GLAD depoda bulunur.
 
 ### macOS
 
@@ -60,7 +61,7 @@ ctest --test-dir build/headless --output-on-failure
 ./build/headless/SimForgeHeadless --scene cradle --steps 120 --csv trace.csv
 ```
 
-Windows çoklu konfigürasyon derlemesinde çalıştırıcı `build\headless\Release\SimForgeHeadless.exe` altındadır. Sahne anahtarları: `domino`, `cradle`, `jenga`, `bridge`, `rain`, `stress`. `--help` seçenekleri gösterir. Adım sayısı 1–1.000.000 aralığındadır. Her adım tam bir sabit tick'tir (varsayılan 1/120 saniye). NaN/Inf fizik durumu veya dosya hatası sıfır olmayan çıkış üretir.
+Windows çoklu konfigürasyon derlemesinde çalıştırıcı `build\headless\Release\SimForgeHeadless.exe` altındadır. Sahne anahtarları: `studio`, `domino`, `cradle`, `jenga`, `bridge`, `rain`, `stress`. `--help` seçenekleri gösterir. Adım sayısı 1–1.000.000 aralığındadır. Her adım tam bir sabit tick'tir (varsayılan 1/120 saniye). NaN/Inf fizik durumu veya dosya hatası sıfır olmayan çıkış üretir.
 
 CSV her aktif cismin tick sonu konum, hız, quaternion ve açısal hızını içerir. Aynı binary ve girdilerle fizik izleri karşılaştırılabilir; CSV tam bir sahne/replay dosyası değildir. Büyük sahnelerde çıktı boyutu ve çalışma süresi adım sayısıyla artar.
 
@@ -85,13 +86,25 @@ CSV her aktif cismin tick sonu konum, hız, quaternion ve açısal hızını iç
 
 ## Örnek sahneler
 
-Domino zinciri, Newton beşiği, Jenga kulesi, asılı köprü, 180 küreli partikül yağmuru ve 36 kutu + 80 küreli karma stres sahnesi. Bunlar etkileşimli gösterimlerdir; analitik doğrulama benchmark'larının yerine geçmez.
+Physics Studio, domino zinciri, Newton beşiği, Jenga kulesi, asılı köprü, 180 küreli partikül yağmuru ve 36 kutu + 80 küreli karma stres sahnesi. Bunlar etkileşimli gösterimlerdir; analitik doğrulama benchmark'larının yerine geçmez.
 
 ## Doğrulama
 
 GoogleTest testleri çarpışma, inertia, quaternion entegrasyonu, raycast, mesafe kısıtı, çift sırası ve fizik dünyasının zaman/reset/yay/ayar davranışlarını kapsar. CTest ayrıca headless CLI'nin başarılı çalışma ve geçersiz girdi yollarını kontrol eder.
 
 GitHub Actions masaüstünü Linux/macOS/Windows üzerinde derler ve testleri çalıştırır; ek Linux işinde ekransız çekirdek AddressSanitizer/UndefinedBehaviorSanitizer ile sınanır. UI etkileşimleri için manuel masaüstü kontrolü de gerekir.
+
+## Gerçek render önizlemesi
+
+Masaüstü derlemesi `SimForgePreview` aracını da üretir. Bu araç aynı Renderer ve Application arayüzünü gizli OpenGL penceresinde çalıştırır, 45 sabit tick sonrasında 1600×900 PPM görüntüsü yazar:
+
+```bash
+./build/SimForgePreview build/preview.ppm
+# Linux CI / ekransız grafik ortamı:
+xvfb-run -a ./build/SimForgePreview build/preview.ppm
+```
+
+Bir OpenGL 3.3 bağlamı gerekir. Headless fizik runner'ından farklı olarak grafik sürücüsünü, shader derlenmesini, framebuffer ve kaynak kapanışını da çalıştırır. Capture modunda FPS gösterilmez; profiler değerleri gerçekten ölçülür. CI görüntüyü artifact olarak saklar. Depodaki PNG, bu uygulama çıktısının biçim dönüşümüdür.
 
 ## Lisans
 

@@ -2,6 +2,8 @@
 
 17 Kasım 2026; başlangıç commit'i `304ee95`.
 
+Bu belge başlangıç durumunun tarihsel incelemesidir. Çok noktalı temas, görsel stüdyo ve girdi sınırlarının güncel durumu [QUALITY.md](QUALITY.md), [ARCHITECTURE.md](ARCHITECTURE.md) ve [VALIDATION.md](VALIDATION.md) içindedir.
+
 ## Gözlenen durum
 
 Depoda tek başlangıç commit'i, 9 GoogleTest testi ve 6 örnek fizik sahnesi vardı. AI servisi/modeli, sahne dosyası, deney manifesti ve kullanıcı verisi katmanı bulunmuyordu. `SimForgeTests` tüm fizik döngüsünü içermiyor; kaynakların yalnızca bir bölümünü ayrıca derliyordu.
