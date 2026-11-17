@@ -14,8 +14,8 @@ option(SIMFORGE_ENABLE_WAYLAND "Enable GLFW's Wayland backend on Linux" OFF)
 include(FetchContent)
 FetchContent_Declare(glm
   GIT_REPOSITORY https://github.com/g-truc/glm.git
-  GIT_TAG 1.0.1
-  GIT_SHALLOW TRUE
+  GIT_TAG 0af55ccecd98d4e5a8d1fad7de25ba429d60e863 # 1.0.1
+  GIT_SHALLOW FALSE
 )
 FetchContent_MakeAvailable(glm)
 
@@ -24,6 +24,7 @@ add_library(SimForgePhysics STATIC
   src/ecs/World.cpp
   src/physics/PhysicsWorld.cpp
   src/physics/Collision.cpp
+  src/physics/ContactSolver.cpp
   src/physics/SpatialHash.cpp
   src/physics/Constraint.cpp
 )
@@ -44,8 +45,8 @@ endif()
 if(SIMFORGE_BUILD_SANDBOX)
   FetchContent_Declare(glfw
     GIT_REPOSITORY https://github.com/glfw/glfw.git
-    GIT_TAG 3.4
-    GIT_SHALLOW TRUE
+    GIT_TAG 7b6aead9fb88b3623e3b3725ebb42670cbe4c579 # 3.4
+    GIT_SHALLOW FALSE
   )
   set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
   set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -53,8 +54,8 @@ if(SIMFORGE_BUILD_SANDBOX)
   set(GLFW_BUILD_WAYLAND ${SIMFORGE_ENABLE_WAYLAND} CACHE BOOL "" FORCE)
   FetchContent_Declare(imgui
     GIT_REPOSITORY https://github.com/ocornut/imgui.git
-    GIT_TAG v1.91.5
-    GIT_SHALLOW TRUE
+    GIT_TAG f401021d5a5d56fe2304056c391e78f81c8d4b8f # v1.91.5
+    GIT_SHALLOW FALSE
   )
   FetchContent_MakeAvailable(glfw imgui)
 
@@ -75,27 +76,31 @@ if(SIMFORGE_BUILD_SANDBOX)
     target_compile_definitions(imgui_lib PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN)
   endif()
 
-  add_executable(SimForge
-    src/main.cpp
+  add_library(SimForgeDesktop STATIC
     src/app/Application.cpp
     src/render/Renderer.cpp
     src/render/Shader.cpp
   )
-  target_link_libraries(SimForge PRIVATE SimForgeScenes imgui_lib)
+  target_link_libraries(SimForgeDesktop PUBLIC SimForgeScenes imgui_lib)
   if(WIN32)
-    target_link_libraries(SimForge PRIVATE opengl32)
+    target_link_libraries(SimForgeDesktop PUBLIC opengl32)
   else()
     find_package(OpenGL REQUIRED)
-    target_link_libraries(SimForge PRIVATE OpenGL::GL)
+    target_link_libraries(SimForgeDesktop PUBLIC OpenGL::GL)
   endif()
+  add_executable(SimForge src/main.cpp)
+  target_link_libraries(SimForge PRIVATE SimForgeDesktop)
+  add_executable(SimForgePreview tools/capture_preview.cpp)
+  target_link_libraries(SimForgePreview PRIVATE SimForgeDesktop)
+
 endif()
 
 if(SIMFORGE_BUILD_TESTS)
   enable_testing()
   FetchContent_Declare(googletest
     GIT_REPOSITORY https://github.com/google/googletest.git
-    GIT_TAG v1.15.2
-    GIT_SHALLOW TRUE
+    GIT_TAG b514bdc898e2951020cbdca1304b75f5950d1f59 # v1.15.2
+    GIT_SHALLOW FALSE
   )
   set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
   set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
@@ -105,6 +110,7 @@ if(SIMFORGE_BUILD_TESTS)
     tests/test_spatial_hash.cpp
     tests/test_advanced_physics.cpp
     tests/test_physics_world.cpp
+    tests/test_reference_physics.cpp
   )
   target_link_libraries(SimForgeTests PRIVATE SimForgeScenes GTest::gtest_main)
   include(GoogleTest)
@@ -115,3 +121,13 @@ if(SIMFORGE_BUILD_TESTS)
     set_tests_properties(Headless.RejectsInvalidSteps PROPERTIES WILL_FAIL TRUE)
   endif()
 endif()
+
+foreach(target SimForgePhysics SimForgeScenes SimForgeDesktop SimForge SimForgePreview SimForgeHeadless SimForgeTests)
+  if(TARGET ${target})
+    if(MSVC)
+      target_compile_options(${target} PRIVATE /W4 /utf-8)
+    else()
+      target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+  endif()
+endforeach()

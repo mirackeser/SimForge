@@ -1,7 +1,11 @@
 #include "ecs/World.hpp"
 
-#include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
+#include <cmath>
+#include <glm/gtc/matrix_transform.hpp>
+#include <stdexcept>
+
+#include "core/Validation.hpp"
 
 namespace simforge {
 
@@ -13,7 +17,17 @@ glm::mat4 TransformComponent::matrix() const {
   return m;
 }
 
-void RigidBodyComponent::computeInertia(ColliderShape shape, float radius, const glm::vec3& halfExtents) {
+void RigidBodyComponent::computeInertia(ColliderShape shape, float radius,
+                                        const glm::vec3& halfExtents) {
+  if (!std::isfinite(inverseMass) || inverseMass < 0.0f)
+    throw std::invalid_argument("Invalid inverse mass");
+  if (shape == ColliderShape::Sphere && (!std::isfinite(radius) || radius <= 0.0f)) {
+    throw std::invalid_argument("Sphere radius must be positive and finite");
+  }
+  if (shape == ColliderShape::Box &&
+      (!finite(halfExtents) || glm::any(glm::lessThanEqual(halfExtents, glm::vec3(0.0f))))) {
+    throw std::invalid_argument("Box extents must be positive and finite");
+  }
   if (isStatic || inverseMass <= 0.0f) {
     inverseInertiaTensorBody = glm::mat3(0.0f);
     inverseInertiaTensorWorld = glm::mat3(0.0f);
@@ -37,6 +51,11 @@ void RigidBodyComponent::computeInertia(ColliderShape shape, float radius, const
     inertia[1][1] = (1.0f / 3.0f) * mass * (x2 + z2);
     inertia[2][2] = (1.0f / 3.0f) * mass * (x2 + y2);
   }
+  for (int axis = 0; axis < 3; ++axis) {
+    if (!std::isfinite(inertia[axis][axis]) || inertia[axis][axis] < 1e-12f) {
+      throw std::invalid_argument("Inertia is outside the supported numeric range");
+    }
+  }
   inverseInertiaTensorBody = glm::inverse(inertia);
   inverseInertiaTensorWorld = inverseInertiaTensorBody;
 }
@@ -51,6 +70,9 @@ void RigidBodyComponent::updateInertiaWorld(const glm::quat& orientation) {
 }
 
 Entity World::createEntity(const std::string& name) {
+  if (records_.size() >= 10000 || nextId_ == kInvalidEntity) {
+    throw std::length_error("Entity capacity exhausted");
+  }
   EntityRecord rec;
   rec.entity = Entity{nextId_++};
   rec.tag.name = name;
@@ -125,9 +147,6 @@ const RenderComponent* World::render(Entity entity) const {
   return const_cast<World*>(this)->render(entity);
 }
 
-void World::clear() {
-  records_.clear();
-  nextId_ = 0;
-}
+void World::clear() { records_.clear(); }
 
 }  // namespace simforge

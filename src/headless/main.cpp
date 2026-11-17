@@ -1,5 +1,3 @@
-#include "scene/DemoScenes.hpp"
-
 #include <charconv>
 #include <cmath>
 #include <fstream>
@@ -8,10 +6,13 @@
 #include <stdexcept>
 #include <string>
 
+#include "scene/DemoScenes.hpp"
+
 namespace {
 
 simforge::DemoScene parseScene(const std::string& name) {
   using simforge::DemoScene;
+  if (name == "studio") return DemoScene::MaterialsLab;
   if (name == "domino") return DemoScene::DominoStack;
   if (name == "cradle") return DemoScene::NewtonsCradle;
   if (name == "jenga") return DemoScene::JengaTower;
@@ -24,7 +25,8 @@ simforge::DemoScene parseScene(const std::string& name) {
 int parseSteps(const std::string& value) {
   int steps = 0;
   auto result = std::from_chars(value.data(), value.data() + value.size(), steps);
-  if (result.ec != std::errc{} || result.ptr != value.data() + value.size() || steps < 1 || steps > 1000000) {
+  if (result.ec != std::errc{} || result.ptr != value.data() + value.size() || steps < 1 ||
+      steps > 1000000) {
     throw std::invalid_argument("Steps must be an integer in [1, 1000000]");
   }
   return steps;
@@ -44,7 +46,7 @@ int main(int argc, char** argv) {
     for (int i = 1; i < argc; ++i) {
       const std::string arg = argv[i];
       if (arg == "--help") {
-        std::cout << "SimForgeHeadless [--scene domino|cradle|jenga|bridge|rain|stress] "
+        std::cout << "SimForgeHeadless [--scene studio|domino|cradle|jenga|bridge|rain|stress] "
                      "[--steps 1..1000000] [--csv path]\n";
         return 0;
       }
@@ -77,13 +79,13 @@ int main(int argc, char** argv) {
         const auto& w = rec.rigidBody.angularVelocity;
         if (!finite(p) || !finite(v) || !finite(w) || !std::isfinite(q.w) || !std::isfinite(q.x) ||
             !std::isfinite(q.y) || !std::isfinite(q.z)) {
-          throw std::runtime_error("Non-finite state at step " + std::to_string(i) +
-                                   ", entity " + std::to_string(rec.entity.id));
+          throw std::runtime_error("Non-finite state at step " + std::to_string(i) + ", entity " +
+                                   std::to_string(rec.entity.id));
         }
         if (csv.is_open()) {
-          csv << i << ',' << physics.simulationTime() << ',' << rec.entity.id << ','
-              << p.x << ',' << p.y << ',' << p.z << ',' << v.x << ',' << v.y << ',' << v.z << ','
-              << q.w << ',' << q.x << ',' << q.y << ',' << q.z << ',' << w.x << ',' << w.y << ',' << w.z << '\n';
+          csv << i << ',' << physics.simulationTime() << ',' << rec.entity.id << ',' << p.x << ','
+              << p.y << ',' << p.z << ',' << v.x << ',' << v.y << ',' << v.z << ',' << q.w << ','
+              << q.x << ',' << q.y << ',' << q.z << ',' << w.x << ',' << w.y << ',' << w.z << '\n';
         }
       }
     }

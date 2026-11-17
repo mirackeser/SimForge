@@ -12,10 +12,13 @@ namespace simforge {
 
 class Application {
  public:
+  ~Application();
   int run();
+  bool capturePreview(const std::string& path, void* (*loader)(const char*));
 
  private:
   bool init();
+  bool initUi(bool nativeInput);
   void shutdown();
   void processInput(float dt);
   void drawUi();
@@ -29,7 +32,7 @@ class Application {
   Renderer renderer_;
   OrbitCamera camera_;
 
-  DemoScene activeScene_{DemoScene::DominoStack};
+  DemoScene activeScene_{DemoScene::MaterialsLab};
   bool paused_{false};
   bool spaceWasPressed_{false};
   bool stepOnce_{false};
@@ -47,7 +50,9 @@ class Application {
   float dragDistance_{10.0f};
 
   // Debug Overlays
-  bool showContacts_{true};
+  bool showContacts_{false};
+  bool showTrails_{true};
+  bool showGrid_{false};
   bool showJoints_{true};
   bool showSpatialGrid_{false};
   bool showProfiler_{true};

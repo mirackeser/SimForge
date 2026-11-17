@@ -1,23 +1,25 @@
 #pragma once
 
+#include <deque>
+#include <glm/glm.hpp>
+#include <unordered_map>
+#include <vector>
+
 #include "ecs/World.hpp"
 #include "physics/Collision.hpp"
 #include "physics/Constraint.hpp"
 #include "physics/SpatialHash.hpp"
 #include "render/Shader.hpp"
 
-#include <glm/glm.hpp>
-#include <vector>
-
 struct GLFWwindow;
 
 namespace simforge {
 
 struct OrbitCamera {
-  glm::vec3 target{0.0f, 2.0f, 0.0f};
-  float distance{18.0f};
-  float yaw{0.6f};
-  float pitch{0.35f};
+  glm::vec3 target{1.5f, 1.0f, -1.0f};
+  float distance{24.0f};
+  float yaw{0.35f};
+  float pitch{0.45f};
   float fovDegrees{45.0f};
 
   glm::mat4 viewMatrix() const;
@@ -27,10 +29,12 @@ struct OrbitCamera {
 
 class Renderer {
  public:
-  bool init(GLFWwindow* window);
+  bool init(GLFWwindow* window, void* (*loader)(const char*) = nullptr);
   void shutdown();
 
   void beginFrame(const OrbitCamera& camera, float aspect);
+  void drawTrails(const World& world);
+  void clearTrails() { trails_.clear(); }
   void drawWorld(const World& world, EntityId selectedEntity = kInvalidEntity);
   void drawGrid(float size, int divisions);
   void endFrame();
@@ -50,9 +54,16 @@ class Renderer {
 
  private:
   void createUnitMeshes();
+  bool createShadowMap();
+  void drawGeometry(const World::EntityRecord& record, Shader& shader);
 
   GLFWwindow* window_{nullptr};
   Shader shader_;
+  Shader shadowShader_;
+  unsigned int shadowFramebuffer_{0};
+  unsigned int shadowTexture_{0};
+  glm::mat4 lightMatrix_{1.0f};
+  std::unordered_map<EntityId, std::deque<glm::vec3>> trails_;
   Shader gridShader_;
   Shader lineShader_;
 

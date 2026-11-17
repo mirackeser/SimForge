@@ -1,10 +1,10 @@
 #pragma once
 
-#include "physics/Collision.hpp"
-
 #include <glm/glm.hpp>
 #include <unordered_map>
 #include <vector>
+
+#include "physics/Collision.hpp"
 
 namespace simforge {
 
@@ -26,20 +26,25 @@ class SpatialHash {
     int y;
     int z;
 
-    bool operator==(const CellKey& other) const { return x == other.x && y == other.y && z == other.z; }
+    bool operator==(const CellKey& other) const {
+      return x == other.x && y == other.y && z == other.z;
+    }
   };
 
   struct CellKeyHash {
     std::size_t operator()(const CellKey& key) const;
   };
 
-  const std::unordered_map<CellKey, std::vector<EntityId>, CellKeyHash>& grid() const { return grid_; }
+  const std::unordered_map<CellKey, std::vector<EntityId>, CellKeyHash>& grid() const {
+    return grid_;
+  }
   float cellSize() const { return cellSize_; }
 
  private:
   glm::ivec3 cellCoord(const glm::vec3& p) const;
 
   float cellSize_;
+  std::size_t entryCount_{0};
   std::unordered_map<CellKey, std::vector<EntityId>, CellKeyHash> grid_;
 };
 

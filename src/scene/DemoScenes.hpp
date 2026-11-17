@@ -11,7 +11,8 @@ enum class DemoScene {
   JengaTower,
   RopeBridge,
   ParticleRain,
-  MixedStress
+  MixedStress,
+  MaterialsLab
 };
 
 void loadDemoScene(World& world, PhysicsWorld& physics, DemoScene scene);

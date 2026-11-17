@@ -22,13 +22,21 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libx11-dev libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev libgl1-mesa-dev
+          sudo apt-get install -y libx11-dev libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev libgl1-mesa-dev xvfb
       - name: Configure CMake
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
       - name: Build
         run: cmake --build build --config Release --parallel 2
       - name: Run Tests
         run: ctest --test-dir build -C Release --output-on-failure --no-tests=error
+      - name: Render Preview Under Software OpenGL
+        if: runner.os == 'Linux'
+        run: xvfb-run -a ./build/SimForgePreview build/preview.ppm
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Linux'
+        with:
+          name: rendered-preview
+          path: build/preview.ppm
 
   headless-sanitizers:
     name: Headless & Sanitizers (Linux)

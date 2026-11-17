@@ -1,6 +1,6 @@
-#include "physics/Collision.hpp"
-
 #include <gtest/gtest.h>
+
+#include "physics/Collision.hpp"
 
 using namespace simforge;
 

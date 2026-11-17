@@ -1,10 +1,11 @@
-#include "physics/PhysicsWorld.hpp"
-#include "scene/DemoScenes.hpp"
-
 #include <gtest/gtest.h>
+
 #include <cmath>
 #include <limits>
 #include <stdexcept>
+
+#include "physics/PhysicsWorld.hpp"
+#include "scene/DemoScenes.hpp"
 
 using namespace simforge;
 
@@ -19,7 +20,7 @@ Entity movingSphere(World& world) {
   body->computeInertia(ColliderShape::Sphere, 0.5f, glm::vec3(0.0f));
   return entity;
 }
-}
+}  // namespace
 
 TEST(PhysicsWorld, FramePartitionsProduceSameState) {
   World a, b;
@@ -73,7 +74,8 @@ TEST(PhysicsWorld, RejectsInvalidFrameTimeBeforeMutatingWorld) {
   World world;
   const auto entity = movingSphere(world);
   PhysicsWorld physics;
-  for (float dt : {-1.0f, std::numeric_limits<float>::infinity(), std::numeric_limits<float>::quiet_NaN()}) {
+  for (float dt :
+       {-1.0f, std::numeric_limits<float>::infinity(), std::numeric_limits<float>::quiet_NaN()}) {
     EXPECT_THROW(physics.step(world, dt), std::invalid_argument);
   }
   EXPECT_FLOAT_EQ(world.transform(entity)->position.x, 0.0f);

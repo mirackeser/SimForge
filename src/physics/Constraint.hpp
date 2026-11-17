@@ -1,10 +1,10 @@
 #pragma once
 
-#include "core/Types.hpp"
-#include "ecs/World.hpp"
-
 #include <glm/glm.hpp>
 #include <vector>
+
+#include "core/Types.hpp"
+#include "ecs/World.hpp"
 
 namespace simforge {
 
@@ -15,7 +15,6 @@ struct DistanceJoint {
   glm::vec3 localAnchorB{0.0f};
   float targetDistance{1.0f};
   float stiffness{1.0f};  // 1.0 = rigid distance constraint
-  float damping{0.05f};
 };
 
 struct SpringJoint {
@@ -41,7 +40,7 @@ class ConstraintSolver {
  public:
   // Apply spring forces once per fixed substep, before integration.
   void applySpringForces(World& world, const std::vector<SpringJoint>& springJoints,
-                        const MouseSpring& mouseSpring, float dt, bool enableRotation = true);
+                         const MouseSpring& mouseSpring, float dt, bool enableRotation = true);
 
   void solveVelocityConstraints(World& world, const std::vector<DistanceJoint>& distanceJoints,
                                 float dt, bool enableRotation = true);

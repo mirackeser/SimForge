@@ -42,6 +42,9 @@ struct ColliderComponent {
 
 struct RenderComponent {
   glm::vec3 color{0.85f, 0.55f, 0.25f};
+  float metallic{0.0f};
+  float roughness{0.5f};
+  int surface{0};  // 0: uniform, 1: stone, 2: wood
   std::string label;
 };
 

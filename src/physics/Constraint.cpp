@@ -1,8 +1,8 @@
 #include "physics/Constraint.hpp"
 
-#include <glm/gtc/quaternion.hpp>
 #include <algorithm>
 #include <cmath>
+#include <glm/gtc/quaternion.hpp>
 
 namespace simforge {
 
@@ -31,20 +31,27 @@ void ConstraintSolver::solveVelocityConstraints(World& world,
 
     glm::vec3 n = delta / currentDist;
 
-    glm::vec3 vA = rbA->velocity + ((rbA->isStatic || !enableRotation) ? glm::vec3(0.0f) : glm::cross(rbA->angularVelocity, rA));
-    glm::vec3 vB = rbB->velocity + ((rbB->isStatic || !enableRotation) ? glm::vec3(0.0f) : glm::cross(rbB->angularVelocity, rB));
+    glm::vec3 vA =
+        rbA->velocity + ((rbA->isStatic || !enableRotation) ? glm::vec3(0.0f)
+                                                            : glm::cross(rbA->angularVelocity, rA));
+    glm::vec3 vB =
+        rbB->velocity + ((rbB->isStatic || !enableRotation) ? glm::vec3(0.0f)
+                                                            : glm::cross(rbB->angularVelocity, rB));
     float relVel = glm::dot(vB - vA, n);
 
     // Baumgarte stabilization term for position error
     float posError = currentDist - joint.targetDistance;
     float bias = (0.2f / std::max(dt, 1e-4f)) * posError;
 
-    glm::vec3 angA = (rbA->isStatic || !enableRotation) ? glm::vec3(0.0f)
-                                   : glm::cross(rbA->inverseInertiaTensorWorld * glm::cross(rA, n), rA);
-    glm::vec3 angB = (rbB->isStatic || !enableRotation) ? glm::vec3(0.0f)
-                                   : glm::cross(rbB->inverseInertiaTensorWorld * glm::cross(rB, n), rB);
+    glm::vec3 angA = (rbA->isStatic || !enableRotation)
+                         ? glm::vec3(0.0f)
+                         : glm::cross(rbA->inverseInertiaTensorWorld * glm::cross(rA, n), rA);
+    glm::vec3 angB = (rbB->isStatic || !enableRotation)
+                         ? glm::vec3(0.0f)
+                         : glm::cross(rbB->inverseInertiaTensorWorld * glm::cross(rB, n), rB);
 
-    float effectiveMass = (rbA->isStatic ? 0.0f : rbA->inverseMass) + (rbB->isStatic ? 0.0f : rbB->inverseMass) + glm::dot(n, angA + angB);
+    float effectiveMass = (rbA->isStatic ? 0.0f : rbA->inverseMass) +
+                          (rbB->isStatic ? 0.0f : rbB->inverseMass) + glm::dot(n, angA + angB);
     if (effectiveMass <= 0.0f) continue;
 
     float lambda = -(relVel + bias) / effectiveMass * joint.stiffness;
@@ -52,18 +59,20 @@ void ConstraintSolver::solveVelocityConstraints(World& world,
 
     if (!rbA->isStatic) {
       rbA->velocity -= impulse * rbA->inverseMass;
-      if (enableRotation) rbA->angularVelocity -= rbA->inverseInertiaTensorWorld * glm::cross(rA, impulse);
+      if (enableRotation)
+        rbA->angularVelocity -= rbA->inverseInertiaTensorWorld * glm::cross(rA, impulse);
     }
     if (!rbB->isStatic) {
       rbB->velocity += impulse * rbB->inverseMass;
-      if (enableRotation) rbB->angularVelocity += rbB->inverseInertiaTensorWorld * glm::cross(rB, impulse);
+      if (enableRotation)
+        rbB->angularVelocity += rbB->inverseInertiaTensorWorld * glm::cross(rB, impulse);
     }
   }
-
 }
 
 void ConstraintSolver::applySpringForces(World& world, const std::vector<SpringJoint>& springJoints,
-                                         const MouseSpring& mouseSpring, float dt, bool enableRotation) {
+                                         const MouseSpring& mouseSpring, float dt,
+                                         bool enableRotation) {
   // 2. Solve Spring Joints
   for (const auto& spring : springJoints) {
     auto* tA = world.transform(Entity{spring.entityA});
@@ -86,8 +95,12 @@ void ConstraintSolver::applySpringForces(World& world, const std::vector<SpringJ
     glm::vec3 n = delta / currentDist;
     float displacement = currentDist - spring.restLength;
 
-    glm::vec3 vA = rbA->velocity + ((rbA->isStatic || !enableRotation) ? glm::vec3(0.0f) : glm::cross(rbA->angularVelocity, rA));
-    glm::vec3 vB = rbB->velocity + ((rbB->isStatic || !enableRotation) ? glm::vec3(0.0f) : glm::cross(rbB->angularVelocity, rB));
+    glm::vec3 vA =
+        rbA->velocity + ((rbA->isStatic || !enableRotation) ? glm::vec3(0.0f)
+                                                            : glm::cross(rbA->angularVelocity, rA));
+    glm::vec3 vB =
+        rbB->velocity + ((rbB->isStatic || !enableRotation) ? glm::vec3(0.0f)
+                                                            : glm::cross(rbB->angularVelocity, rB));
     float relVel = glm::dot(vB - vA, n);
 
     float forceMagnitude = spring.stiffness * displacement + spring.damping * relVel;
@@ -95,11 +108,13 @@ void ConstraintSolver::applySpringForces(World& world, const std::vector<SpringJ
 
     if (!rbA->isStatic) {
       rbA->velocity += force * rbA->inverseMass * dt;
-      if (enableRotation) rbA->angularVelocity += rbA->inverseInertiaTensorWorld * glm::cross(rA, force) * dt;
+      if (enableRotation)
+        rbA->angularVelocity += rbA->inverseInertiaTensorWorld * glm::cross(rA, force) * dt;
     }
     if (!rbB->isStatic) {
       rbB->velocity -= force * rbB->inverseMass * dt;
-      if (enableRotation) rbB->angularVelocity -= rbB->inverseInertiaTensorWorld * glm::cross(rB, force) * dt;
+      if (enableRotation)
+        rbB->angularVelocity -= rbB->inverseInertiaTensorWorld * glm::cross(rB, force) * dt;
     }
   }
 
@@ -112,11 +127,13 @@ void ConstraintSolver::applySpringForces(World& world, const std::vector<SpringJ
       glm::vec3 anchorWorld = t->position + r;
       glm::vec3 delta = mouseSpring.worldTarget - anchorWorld;
 
-      glm::vec3 vAnchor = rb->velocity + (enableRotation ? glm::cross(rb->angularVelocity, r) : glm::vec3(0.0f));
+      glm::vec3 vAnchor =
+          rb->velocity + (enableRotation ? glm::cross(rb->angularVelocity, r) : glm::vec3(0.0f));
       glm::vec3 force = mouseSpring.stiffness * delta - mouseSpring.damping * vAnchor;
 
       rb->velocity += force * rb->inverseMass * dt;
-      if (enableRotation) rb->angularVelocity += rb->inverseInertiaTensorWorld * glm::cross(r, force) * dt;
+      if (enableRotation)
+        rb->angularVelocity += rb->inverseInertiaTensorWorld * glm::cross(r, force) * dt;
     }
   }
 }
@@ -143,7 +160,8 @@ void ConstraintSolver::solvePositionConstraints(World& world,
     if (currentDist < 1e-5f) continue;
 
     float error = currentDist - joint.targetDistance;
-    float totalInvMass = (rbA->isStatic ? 0.0f : rbA->inverseMass) + (rbB->isStatic ? 0.0f : rbB->inverseMass);
+    float totalInvMass =
+        (rbA->isStatic ? 0.0f : rbA->inverseMass) + (rbB->isStatic ? 0.0f : rbB->inverseMass);
     if (totalInvMass <= 0.0f) continue;
 
     glm::vec3 correction = (delta / currentDist) * (error / totalInvMass) * 0.75f;

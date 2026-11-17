@@ -1,12 +1,12 @@
 #include <gtest/gtest.h>
 
+#include <cmath>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
+
 #include "ecs/World.hpp"
 #include "physics/Collision.hpp"
 #include "physics/Constraint.hpp"
-
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/quaternion.hpp>
-#include <cmath>
 
 namespace simforge {
 
@@ -129,8 +129,9 @@ TEST(AdvancedPhysics, RaycastIntersections) {
   EXPECT_NEAR(hitNorm.z, 1.0f, 1e-4f);
 
   // Ray vs OBB
-  bool hitOBB = intersectRayOBB(ray, glm::vec3(0.0f, 0.0f, -5.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f),
-                                glm::vec3(1.0f, 1.0f, 1.0f), tHit, hitNorm);
+  bool hitOBB =
+      intersectRayOBB(ray, glm::vec3(0.0f, 0.0f, -5.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f),
+                      glm::vec3(1.0f, 1.0f, 1.0f), tHit, hitNorm);
   EXPECT_TRUE(hitOBB);
   EXPECT_NEAR(tHit, 4.0f, 1e-4f);
   EXPECT_NEAR(hitNorm.z, 1.0f, 1e-4f);
@@ -140,8 +141,9 @@ TEST(AdvancedPhysics, RaycastIntersections) {
   missRay.origin = glm::vec3(10.0f, 10.0f, 0.0f);
   missRay.direction = glm::vec3(0.0f, 0.0f, -1.0f);
   EXPECT_FALSE(intersectRaySphere(missRay, glm::vec3(0.0f, 0.0f, -5.0f), 1.0f, tHit, hitNorm));
-  EXPECT_FALSE(intersectRayOBB(missRay, glm::vec3(0.0f, 0.0f, -5.0f), glm::quat(1.0f, 0.0f, 0.0f, 0.0f),
-                               glm::vec3(1.0f, 1.0f, 1.0f), tHit, hitNorm));
+  EXPECT_FALSE(intersectRayOBB(missRay, glm::vec3(0.0f, 0.0f, -5.0f),
+                               glm::quat(1.0f, 0.0f, 0.0f, 0.0f), glm::vec3(1.0f, 1.0f, 1.0f), tHit,
+                               hitNorm));
 }
 
 TEST(AdvancedPhysics, DistanceConstraintSolvesLength) {

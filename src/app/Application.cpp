@@ -1,20 +1,23 @@
 #include "app/Application.hpp"
 
-#include <glad/glad.h>
 #include <GLFW/glfw3.h>
-
+#include <glad/glad.h>
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 
+#include <algorithm>
+#include <fstream>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/random.hpp>
-#include <algorithm>
 #include <iostream>
-#include <random>
 #include <limits>
+#include <random>
+#include <vector>
 
 namespace simforge {
+
+Application::~Application() { shutdown(); }
 
 bool Application::init() {
   if (!glfwInit()) {
@@ -24,12 +27,13 @@ bool Application::init() {
 
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+  glfwWindowHint(GLFW_SAMPLES, 4);
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 #ifdef __APPLE__
   glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
 #endif
 
-  window_ = glfwCreateWindow(1360, 780, "SimForge — Advanced Real-Time Physics Sandbox", nullptr, nullptr);
+  window_ = glfwCreateWindow(1600, 900, "SimForge | Physics Studio", nullptr, nullptr);
   if (!window_) {
     std::cerr << "Failed to create window\n";
     glfwTerminate();
@@ -45,35 +49,81 @@ bool Application::init() {
     return false;
   }
 
-  IMGUI_CHECKVERSION();
-  ImGui::CreateContext();
-  ImGui::StyleColorsDark();
-
-  // Custom polished ImGui styling
-  ImGuiStyle& style = ImGui::GetStyle();
-  style.WindowRounding = 6.0f;
-  style.FrameRounding = 4.0f;
-  style.GrabRounding = 4.0f;
-  style.Colors[ImGuiCol_WindowBg] = ImVec4(0.10f, 0.12f, 0.16f, 0.92f);
-  style.Colors[ImGuiCol_Header] = ImVec4(0.20f, 0.35f, 0.55f, 0.85f);
-  style.Colors[ImGuiCol_Button] = ImVec4(0.22f, 0.40f, 0.65f, 0.85f);
-  style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.28f, 0.48f, 0.78f, 1.0f);
-
-  ImGui_ImplGlfw_InitForOpenGL(window_, true);
-  ImGui_ImplOpenGL3_Init("#version 330");
+  if (!initUi(true)) return false;
 
   loadDemoScene(world_, physics_, activeScene_);
   lastFrameTime_ = glfwGetTime();
   return true;
 }
 
+bool Application::initUi(bool nativeInput) {
+  IMGUI_CHECKVERSION();
+  ImGui::CreateContext();
+  ImGui::StyleColorsDark();
+
+  ImGuiStyle& style = ImGui::GetStyle();
+  ImGui::GetIO().FontGlobalScale = 1.1f;
+  style.WindowPadding = ImVec2(16, 14);
+  style.ItemSpacing = ImVec2(8, 9);
+  style.WindowRounding = 8.0f;
+  style.FrameRounding = 4.0f;
+  style.GrabRounding = 4.0f;
+  style.Colors[ImGuiCol_TitleBgActive] = ImVec4(0.1f, 0.13f, 0.16f, 1.0f);
+  style.Colors[ImGuiCol_CheckMark] = ImVec4(0.8f, 0.69f, 0.43f, 1.0f);
+  style.Colors[ImGuiCol_SliderGrab] = ImVec4(0.4f, 0.58f, 0.65f, 1.0f);
+  style.Colors[ImGuiCol_WindowBg] = ImVec4(0.055f, 0.07f, 0.09f, 0.98f);
+  style.Colors[ImGuiCol_Header] = ImVec4(0.13f, 0.18f, 0.23f, 1.0f);
+  style.Colors[ImGuiCol_Button] = ImVec4(0.16f, 0.24f, 0.3f, 1.0f);
+  style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.23f, 0.36f, 0.43f, 1.0f);
+
+  if (nativeInput && !ImGui_ImplGlfw_InitForOpenGL(window_, true)) return false;
+  if (!ImGui_ImplOpenGL3_Init("#version 330")) return false;
+
+  return true;
+}
+
+bool Application::capturePreview(const std::string& path, void* (*loader)(const char*)) {
+  constexpr int width = 1600, height = 900;
+  if (!renderer_.init(nullptr, loader) || !initUi(false)) return false;
+  ImGui::GetIO().IniFilename = nullptr;
+  ImGui::GetIO().DisplaySize = ImVec2(width, height);
+  ImGui::GetIO().DeltaTime = physics_.settings().fixedTimestep;
+  loadDemoScene(world_, physics_, activeScene_);
+  for (int frame = 0; frame < 45; ++frame) {
+    physics_.stepFixed(world_);
+    renderer_.onFramebufferResize(width, height);
+    renderer_.beginFrame(camera_, static_cast<float>(width) / height);
+    renderer_.drawWorld(world_);
+    renderer_.drawJoints(world_, physics_.distanceJoints(), physics_.springJoints(),
+                         physics_.mouseSpring());
+    renderer_.drawTrails(world_);
+    renderer_.flushLines();
+    drawUi();
+  }
+  std::vector<unsigned char> pixels(width * height * 3);
+  glPixelStorei(GL_PACK_ALIGNMENT, 1);
+  glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
+  if (glGetError() != GL_NO_ERROR) return false;
+  std::ofstream output(path, std::ios::binary);
+  if (!output) return false;
+  output << "P6\n" << width << ' ' << height << "\n255\n";
+  for (int row = height - 1; row >= 0; --row) {
+    output.write(reinterpret_cast<const char*>(pixels.data() + row * width * 3), width * 3);
+  }
+  output.flush();
+  return static_cast<bool>(output);
+}
+
 void Application::shutdown() {
-  ImGui_ImplOpenGL3_Shutdown();
-  ImGui_ImplGlfw_Shutdown();
-  ImGui::DestroyContext();
+  if (ImGui::GetCurrentContext()) {
+    if (ImGui::GetIO().BackendRendererUserData) ImGui_ImplOpenGL3_Shutdown();
+    if (ImGui::GetIO().BackendPlatformUserData) ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
+  }
   renderer_.shutdown();
   if (window_) {
     glfwDestroyWindow(window_);
+    window_ = nullptr;
   }
   glfwTerminate();
 }
@@ -244,117 +294,135 @@ void Application::processInput(float dt) {
   }
 
   // Camera Zoom (+ / - or keypad)
-  if (glfwGetKey(window_, GLFW_KEY_EQUAL) == GLFW_PRESS || glfwGetKey(window_, GLFW_KEY_KP_ADD) == GLFW_PRESS) {
+  if (glfwGetKey(window_, GLFW_KEY_EQUAL) == GLFW_PRESS ||
+      glfwGetKey(window_, GLFW_KEY_KP_ADD) == GLFW_PRESS) {
     camera_.distance = glm::max(3.0f, camera_.distance - dt * 10.0f);
   }
-  if (glfwGetKey(window_, GLFW_KEY_MINUS) == GLFW_PRESS || glfwGetKey(window_, GLFW_KEY_KP_SUBTRACT) == GLFW_PRESS) {
+  if (glfwGetKey(window_, GLFW_KEY_MINUS) == GLFW_PRESS ||
+      glfwGetKey(window_, GLFW_KEY_KP_SUBTRACT) == GLFW_PRESS) {
     camera_.distance = glm::min(70.0f, camera_.distance + dt * 10.0f);
   }
 }
 
 void Application::drawUi() {
   ImGui_ImplOpenGL3_NewFrame();
-  ImGui_ImplGlfw_NewFrame();
+  if (window_) ImGui_ImplGlfw_NewFrame();
   ImGui::NewFrame();
 
-  // 1. Main Control Panel
-  ImGui::SetNextWindowPos(ImVec2(16, 16), ImGuiCond_FirstUseEver);
-  ImGui::SetNextWindowSize(ImVec2(380, 560), ImGuiCond_FirstUseEver);
+  const auto display = ImGui::GetIO().DisplaySize;
+  ImGui::SetNextWindowPos(ImVec2(std::max(16.0f, display.x - 316.0f), 16), ImGuiCond_Always);
+  ImGui::SetNextWindowSize(ImVec2(300, std::max(200.0f, display.y - 32.0f)), ImGuiCond_Always);
 
-  ImGui::Begin("SimForge Control Panel");
-  ImGui::TextColored(ImVec4(0.3f, 0.85f, 1.0f, 1.0f), "Advanced Rigid-Body Simulation Engine");
-  ImGui::TextDisabled("Fixed Timestep • Spatial Hash • OBB SAT • Joints");
+  ImGui::Begin("SIMFORGE", nullptr,
+               ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
+  ImGui::TextColored(ImVec4(0.8f, 0.69f, 0.43f, 1.0f), "PHYSICS STUDIO");
+  ImGui::TextDisabled("Real-time rigid body laboratory");
   ImGui::Separator();
 
-  // Demo Scene Selector
   int sceneIndex = static_cast<int>(activeScene_);
   const char* sceneList =
-      "Domino Chain & Towers\0Newton's Cradle (Constraints)\0Jenga Stacking Tower\0Suspended Rope Bridge\0Particle Rain (Broadphase)\0Mixed Stress Sandbox\0";
+      "Domino Chain & Towers\0Newton's Cradle (Constraints)\0Jenga Stacking Tower\0Suspended Rope "
+      "Bridge\0Particle Rain (Broadphase)\0Mixed Stress Sandbox\0Physics Studio\0";
 
-  if (ImGui::Combo("Scene", &sceneIndex, sceneList)) {
+  ImGui::TextDisabled("SCENE");
+  ImGui::SetNextItemWidth(-1);
+  if (ImGui::Combo("##scene", &sceneIndex, sceneList)) {
     activeScene_ = static_cast<DemoScene>(sceneIndex);
     loadDemoScene(world_, physics_, activeScene_);
     selectedEntity_ = kInvalidEntity;
     isDraggingEntity_ = false;
+    renderer_.clearTrails();
     stepOnce_ = false;
   }
 
-  // Simulation State Controls
-  if (ImGui::Button(paused_ ? "  Resume (Space)  " : "  Pause (Space)  ")) {
+  if (ImGui::Button(paused_ ? "Resume (Space)" : "Pause (Space)", ImVec2(128, 0))) {
     paused_ = !paused_;
     physics_.resetAccumulatedTime();
   }
   ImGui::SameLine();
-  if (ImGui::Button("Step Frame")) {
+  if (ImGui::Button("Step Frame", ImVec2(128, 0))) {
     paused_ = true;
     stepOnce_ = true;
   }
-  ImGui::SameLine();
-  if (ImGui::Button("Reset Scene")) {
+  if (ImGui::Button("Reset Scene", ImVec2(-1, 0))) {
     loadDemoScene(world_, physics_, activeScene_);
     selectedEntity_ = kInvalidEntity;
     isDraggingEntity_ = false;
+    renderer_.clearTrails();
     stepOnce_ = false;
   }
 
   ImGui::Spacing();
-  if (ImGui::Button("+ Spawn Sphere")) {
+  if (ImGui::Button("+ Sphere", ImVec2(128, 0))) {
     spawnRandomSphere();
   }
   ImGui::SameLine();
-  if (ImGui::Button("+ Spawn Box")) {
+  if (ImGui::Button("+ Box", ImVec2(128, 0))) {
     spawnRandomBox();
   }
 
   ImGui::Separator();
 
-  // Physics Parameters
   auto& settings = physics_.settings();
-  if (ImGui::CollapsingHeader("Physics & Solver Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
-    ImGui::SliderFloat3("Gravity", &settings.gravity.x, -25.0f, 5.0f);
+  if (ImGui::CollapsingHeader("Physics & Solver Settings")) {
+    ImGui::TextUnformatted("Gravity (m/s2)");
+    ImGui::SetNextItemWidth(-1);
+    ImGui::SliderFloat3("##gravity", &settings.gravity.x, -25.0f, 5.0f);
 
     float fixedDtMs = settings.fixedTimestep * 1000.0f;
-    if (ImGui::SliderFloat("Fixed dt (ms)", &fixedDtMs, 1000.0f / 240.0f, 1000.0f / 30.0f, "%.2f ms")) {
+    ImGui::TextUnformatted("Fixed timestep");
+    ImGui::SetNextItemWidth(-1);
+    if (ImGui::SliderFloat("##timestep", &fixedDtMs, 1000.0f / 240.0f, 1000.0f / 30.0f,
+                           "%.2f ms")) {
       settings.fixedTimestep = fixedDtMs / 1000.0f;
     }
 
-    ImGui::SliderInt("Velocity Iterations", &settings.velocityIterations, 1, 20);
-    ImGui::SliderInt("Position Iterations", &settings.positionIterations, 1, 10);
+    ImGui::TextUnformatted("Velocity iterations");
+    ImGui::SetNextItemWidth(-1);
+    ImGui::SliderInt("##velocity-iterations", &settings.velocityIterations, 1, 20);
+    ImGui::TextUnformatted("Position iterations");
+    ImGui::SetNextItemWidth(-1);
+    ImGui::SliderInt("##position-iterations", &settings.positionIterations, 1, 10);
     ImGui::Checkbox("Friction", &settings.enableFriction);
     ImGui::Checkbox("Rotational Dynamics", &settings.enableRotationalDynamics);
   }
 
-  // Visual Overlays
-  if (ImGui::CollapsingHeader("Debug Overlays", ImGuiTreeNodeFlags_DefaultOpen)) {
+  if (ImGui::CollapsingHeader("Debug Overlays")) {
+    if (ImGui::Checkbox("Motion Trails", &showTrails_)) renderer_.clearTrails();
+    ImGui::Checkbox("Reference Grid", &showGrid_);
     ImGui::Checkbox("Contact Points & Normals", &showContacts_);
     ImGui::Checkbox("Distance & Spring Joints", &showJoints_);
     ImGui::Checkbox("Spatial Hash Grid Cells", &showSpatialGrid_);
   }
 
-  // Profiler Panel
   if (ImGui::CollapsingHeader("Performance Profiler", ImGuiTreeNodeFlags_DefaultOpen)) {
     const auto& prof = physics_.profileStats();
+    ImGui::Text("Simulation: %.3f s", physics_.simulationTime());
     ImGui::Text("Active Entities: %zu", world_.entities().size());
     ImGui::Text("Contacts (Last Substep): %d", physics_.collisionCountLastFrame());
-    ImGui::Text("Active Joints: %zu", physics_.distanceJoints().size() + physics_.springJoints().size());
+    ImGui::Text("Active Joints: %zu",
+                physics_.distanceJoints().size() + physics_.springJoints().size());
     ImGui::Separator();
-    ImGui::Text("Integration:         %6.1f µs", prof.integrationUs);
-    ImGui::Text("Broadphase Hash:     %6.1f µs", prof.broadphaseUs);
-    ImGui::Text("Narrowphase & Solve: %6.1f µs", prof.narrowphaseUs);
-    ImGui::Text("Constraint Solver:   %6.1f µs", prof.constraintSolverUs);
-    ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "Total Substep:       %6.1f µs", prof.totalSubstepUs);
+    ImGui::Text("Integration:      %6.1f us", prof.integrationUs);
+    ImGui::Text("Broadphase:       %6.1f us", prof.broadphaseUs);
+    ImGui::Text("Contacts & solve: %6.1f us", prof.narrowphaseUs);
+    ImGui::Text("Joints:           %6.1f us", prof.constraintSolverUs);
+    ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "Total substep:    %6.1f us",
+                       prof.totalSubstepUs);
     ImGui::Separator();
-    ImGui::Text("FPS: %.1f (%.2f ms)", fpsSmoothed_, 1000.0f / std::max(fpsSmoothed_, 1.0f));
+    if (window_)
+      ImGui::Text("FPS: %.1f (%.2f ms)", fpsSmoothed_, 1000.0f / std::max(fpsSmoothed_, 1.0f));
+    else
+      ImGui::TextDisabled("Offline capture");
   }
 
   ImGui::Separator();
   ImGui::TextDisabled("Controls:");
-  ImGui::BulletText("LMB Drag: Grab and throw 3D objects (Mouse Spring)");
-  ImGui::BulletText("RMB Drag: Orbit Camera");
-  ImGui::BulletText("+ / - : Zoom In / Out");
+  ImGui::BulletText("LMB: Grab / throw");
+  ImGui::BulletText("RMB: Orbit camera");
+  ImGui::BulletText("+ / - : Zoom");
   ImGui::End();
 
-  // 2. Selected Entity Inspector
   if (selectedEntity_ != kInvalidEntity) {
     ImGui::SetNextWindowPos(ImVec2(16, 590), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(380, 160), ImGuiCond_FirstUseEver);
@@ -368,9 +436,10 @@ void Application::drawUi() {
       ImGui::Text("Entity ID: %u", selectedEntity_);
       ImGui::Text("Shape: %s", c->shape == ColliderShape::Sphere ? "Sphere" : "Oriented Box (OBB)");
       ImGui::Text("Position: (%.2f, %.2f, %.2f)", t->position.x, t->position.y, t->position.z);
-      ImGui::Text("Linear Velocity: (%.2f, %.2f, %.2f)", rb->velocity.x, rb->velocity.y, rb->velocity.z);
-      ImGui::Text("Angular Velocity: (%.2f, %.2f, %.2f)", rb->angularVelocity.x, rb->angularVelocity.y,
-                  rb->angularVelocity.z);
+      ImGui::Text("Linear Velocity: (%.2f, %.2f, %.2f)", rb->velocity.x, rb->velocity.y,
+                  rb->velocity.z);
+      ImGui::Text("Angular Velocity: (%.2f, %.2f, %.2f)", rb->angularVelocity.x,
+                  rb->angularVelocity.y, rb->angularVelocity.z);
 
       if (ImGui::Button("Upward Impulse")) {
         rb->velocity += glm::vec3(0.0f, 6.0f, 0.0f);
@@ -390,6 +459,7 @@ void Application::drawUi() {
 
 int Application::run() {
   if (!init()) {
+    shutdown();
     return 1;
   }
 
@@ -412,18 +482,23 @@ int Application::run() {
 
     int fbW, fbH;
     glfwGetFramebufferSize(window_, &fbW, &fbH);
+    if (fbW <= 0 || fbH <= 0) {
+      glfwWaitEventsTimeout(0.05);
+      continue;
+    }
     renderer_.onFramebufferResize(fbW, fbH);
-    float aspect = fbW / static_cast<float>(glm::max(fbH, 1));
-
+    const float aspect = fbW / static_cast<float>(fbH);
     renderer_.beginFrame(camera_, aspect);
-    renderer_.drawGrid(50.0f, 50);
+    if (showGrid_) renderer_.drawGrid(50.0f, 50);
     renderer_.drawWorld(world_, selectedEntity_);
+    if (showTrails_) renderer_.drawTrails(world_);
 
     if (showContacts_) {
       renderer_.drawContacts(physics_.debugContacts());
     }
     if (showJoints_) {
-      renderer_.drawJoints(world_, physics_.distanceJoints(), physics_.springJoints(), physics_.mouseSpring());
+      renderer_.drawJoints(world_, physics_.distanceJoints(), physics_.springJoints(),
+                           physics_.mouseSpring());
     }
     if (showSpatialGrid_) {
       renderer_.drawSpatialHashCells(physics_.spatialHash(), physics_.spatialHash().cellSize());

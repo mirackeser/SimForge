@@ -1,12 +1,13 @@
 #pragma once
 
+#include <chrono>
+#include <vector>
+
 #include "ecs/World.hpp"
 #include "physics/Collision.hpp"
 #include "physics/Constraint.hpp"
+#include "physics/ContactSolver.hpp"
 #include "physics/SpatialHash.hpp"
-
-#include <chrono>
-#include <vector>
 
 namespace simforge {
 
@@ -69,9 +70,18 @@ class PhysicsWorld {
 
  private:
   void validateSettings() const;
+  void validateWorld(const World& world) const;
   void advance(World& world, float dt);
   void integrate(World& world, float dt);
-  void detectAndResolve(World& world, float dt);
+  void detectContacts(World& world);
+  void correctContactPositions(World& world);
+  struct SolverContact {
+    std::size_t indexA;
+    std::size_t indexB;
+    ContactManifold manifold;
+    ContactSolverState state;
+  };
+  std::vector<SolverContact> solverContacts_;
 
   PhysicsSettings settings_;
   SpatialHash spatialHash_;

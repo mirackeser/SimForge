@@ -1,6 +1,6 @@
-#include "physics/SpatialHash.hpp"
-
 #include <gtest/gtest.h>
+
+#include "physics/SpatialHash.hpp"
 
 using namespace simforge;
 
@@ -24,7 +24,8 @@ TEST(SpatialHash, PairOrderIsCanonicalAndIndependentOfInsertionOrder) {
   std::vector<glm::vec3> positions(3, glm::vec3(0.0f));
   std::vector<float> radii(3, 1.0f);
   for (EntityId i : ids) forward.insert(i, positions[i], radii[i]);
-  for (auto it = ids.rbegin(); it != ids.rend(); ++it) reverse.insert(*it, positions[*it], radii[*it]);
+  for (auto it = ids.rbegin(); it != ids.rend(); ++it)
+    reverse.insert(*it, positions[*it], radii[*it]);
   const auto a = forward.queryPairs(ids, positions, radii);
   const auto b = reverse.queryPairs(ids, positions, radii);
   ASSERT_EQ(a.size(), 3u);

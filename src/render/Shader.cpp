@@ -19,37 +19,52 @@ unsigned int compileShader(unsigned int type, const char* source) {
     char log[1024];
     glGetShaderInfoLog(shader, sizeof(log), nullptr, log);
     std::cerr << "Shader compile error: " << log << '\n';
+    glDeleteShader(shader);
+    return 0;
   }
   return shader;
 }
 
 }  // namespace
 
-Shader::~Shader() {
-  if (programId_ != 0) {
-    glDeleteProgram(programId_);
-  }
+Shader::~Shader() { reset(); }
+
+void Shader::reset() {
+  if (programId_ != 0) glDeleteProgram(programId_);
+  programId_ = 0;
 }
 
 bool Shader::loadFromSource(const std::string& vertexSrc, const std::string& fragmentSrc) {
   unsigned int vs = compileShader(GL_VERTEX_SHADER, vertexSrc.c_str());
   unsigned int fs = compileShader(GL_FRAGMENT_SHADER, fragmentSrc.c_str());
-  programId_ = glCreateProgram();
-  glAttachShader(programId_, vs);
-  glAttachShader(programId_, fs);
-  glLinkProgram(programId_);
+  if (vs == 0 || fs == 0) {
+    if (vs) glDeleteShader(vs);
+    if (fs) glDeleteShader(fs);
+    return false;
+  }
+  const unsigned int replacement = glCreateProgram();
+  glAttachShader(replacement, vs);
+  glAttachShader(replacement, fs);
+  glLinkProgram(replacement);
   glDeleteShader(vs);
   glDeleteShader(fs);
 
   int success = 0;
-  glGetProgramiv(programId_, GL_LINK_STATUS, &success);
+  glGetProgramiv(replacement, GL_LINK_STATUS, &success);
   if (!success) {
     char log[1024];
-    glGetProgramInfoLog(programId_, sizeof(log), nullptr, log);
+    glGetProgramInfoLog(replacement, sizeof(log), nullptr, log);
     std::cerr << "Program link error: " << log << '\n';
+    glDeleteProgram(replacement);
     return false;
   }
+  reset();
+  programId_ = replacement;
   return true;
+}
+
+void Shader::setInt(const std::string& name, int value) const {
+  glUniform1i(glGetUniformLocation(programId_, name.c_str()), value);
 }
 
 void Shader::use() const { glUseProgram(programId_); }
