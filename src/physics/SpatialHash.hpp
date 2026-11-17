@@ -14,6 +14,8 @@ class SpatialHash {
 
   void clear();
   void insert(EntityId id, const glm::vec3& position, float radius);
+  // Conservative world-space bounds avoid filling a sphere around thin/large boxes.
+  void insertAabb(EntityId id, const glm::vec3& minimum, const glm::vec3& maximum);
 
   std::vector<CollisionPair> queryPairs(const std::vector<EntityId>& ids,
                                         const std::vector<glm::vec3>& positions,

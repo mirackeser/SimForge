@@ -429,7 +429,6 @@ Ray Renderer::screenPointToRay(double mouseX, double mouseY, int screenWidth, in
 }
 
 void Renderer::endFrame() {
-  flushLines();
   glfwSwapBuffers(window_);
 }
 

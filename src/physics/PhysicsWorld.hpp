@@ -33,13 +33,17 @@ class PhysicsWorld {
   explicit PhysicsWorld(PhysicsSettings settings = {});
 
   void step(World& world, float dt);
+  // Advance exactly one fixed tick, independent of the render-time accumulator.
+  void stepFixed(World& world);
+  // Clear all scene-specific state, including joints and simulation clock.
+  void reset();
   void resetAccumulatedTime();
 
   PhysicsSettings& settings() { return settings_; }
   const PhysicsSettings& settings() const { return settings_; }
 
   int collisionCountLastFrame() const { return collisionCountLastFrame_; }
-  float simulationTime() const { return simulationTime_; }
+  double simulationTime() const { return simulationTime_; }
   const PhysicsProfileStats& profileStats() const { return profileStats_; }
 
   // Constraints & Joints
@@ -64,6 +68,8 @@ class PhysicsWorld {
   const SpatialHash& spatialHash() const { return spatialHash_; }
 
  private:
+  void validateSettings() const;
+  void advance(World& world, float dt);
   void integrate(World& world, float dt);
   void detectAndResolve(World& world, float dt);
 
@@ -77,8 +83,8 @@ class PhysicsWorld {
 
   std::vector<ContactManifold> debugContacts_;
 
-  float accumulator_{0.0f};
-  float simulationTime_{0.0f};
+  double accumulator_{0.0};
+  double simulationTime_{0.0};
   int collisionCountLastFrame_{0};
   PhysicsProfileStats profileStats_;
 };

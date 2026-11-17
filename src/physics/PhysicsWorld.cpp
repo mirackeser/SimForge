@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <stdexcept>
 
 namespace simforge {
 
@@ -13,50 +14,82 @@ PhysicsWorld::PhysicsWorld(PhysicsSettings settings)
 
 void PhysicsWorld::resetAccumulatedTime() { accumulator_ = 0.0f; }
 
-void PhysicsWorld::step(World& world, float dt) {
-  accumulator_ += dt;
-  const float step = settings_.fixedTimestep;
-  int safety = 0;
-
-  while (accumulator_ >= step && safety < 8) {
-    auto tStartSubstep = std::chrono::high_resolution_clock::now();
-
-    // 1. Integration
-    auto t0 = std::chrono::high_resolution_clock::now();
-    integrate(world, step);
-    auto t1 = std::chrono::high_resolution_clock::now();
-    profileStats_.integrationUs =
-        std::chrono::duration<float, std::micro>(t1 - t0).count();
-
-    // 2. Velocity Iterations (Constraints + Contacts)
-    auto tConstraintStart = std::chrono::high_resolution_clock::now();
-    for (int iter = 0; iter < settings_.velocityIterations; ++iter) {
-      constraintSolver_.solveVelocityConstraints(world, distanceJoints_, springJoints_, mouseSpring_, step);
-      detectAndResolve(world, step);
-    }
-    auto tConstraintEnd = std::chrono::high_resolution_clock::now();
-    profileStats_.constraintSolverUs =
-        std::chrono::duration<float, std::micro>(tConstraintEnd - tConstraintStart).count();
-
-    // 3. Position Iterations (Joints)
-    for (int iter = 0; iter < settings_.positionIterations; ++iter) {
-      constraintSolver_.solvePositionConstraints(world, distanceJoints_);
-    }
-
-    auto tEndSubstep = std::chrono::high_resolution_clock::now();
-    profileStats_.totalSubstepUs =
-        std::chrono::duration<float, std::micro>(tEndSubstep - tStartSubstep).count();
-
-    simulationTime_ += step;
-    accumulator_ -= step;
-    ++safety;
+void PhysicsWorld::validateSettings() const {
+  if (!std::isfinite(settings_.fixedTimestep) || settings_.fixedTimestep <= 0.0f ||
+      !std::isfinite(settings_.spatialCellSize) || settings_.spatialCellSize <= 0.0f ||
+      settings_.velocityIterations < 1 || settings_.positionIterations < 0 ||
+      !std::isfinite(settings_.gravity.x) || !std::isfinite(settings_.gravity.y) ||
+      !std::isfinite(settings_.gravity.z)) {
+    throw std::invalid_argument("Invalid physics settings");
   }
+}
+
+void PhysicsWorld::reset() {
+  resetAccumulatedTime();
+  simulationTime_ = 0.0;
+  collisionCountLastFrame_ = 0;
+  profileStats_ = {};
+  debugContacts_.clear();
+  spatialHash_.clear();
+  clearJoints();
+}
+
+void PhysicsWorld::step(World& world, float dt) {
+  if (!std::isfinite(dt) || dt < 0.0f) {
+    throw std::invalid_argument("Frame time must be finite and nonnegative");
+  }
+  validateSettings();
+  accumulator_ += static_cast<double>(dt);
+  const double step = settings_.fixedTimestep;
+  // Limit catch-up work and discard whole excess ticks, keeping the fraction.
+  // A stalled render frame must not leave a growing backlog on later frames.
+  if (accumulator_ >= 9.0 * step) {
+    accumulator_ = 8.0 * step + std::fmod(accumulator_, step);
+  }
+  for (int substep = 0; accumulator_ >= step && substep < 8; ++substep) {
+    advance(world, settings_.fixedTimestep);
+    accumulator_ -= step;
+  }
+}
+
+void PhysicsWorld::stepFixed(World& world) {
+  validateSettings();
+  advance(world, settings_.fixedTimestep);
+}
+
+void PhysicsWorld::advance(World& world, float dt) {
+  using Clock = std::chrono::steady_clock;
+  const auto start = Clock::now();
+  profileStats_ = {};
+  if (spatialHash_.cellSize() != settings_.spatialCellSize) {
+    spatialHash_ = SpatialHash(settings_.spatialCellSize);
+  }
+
+  const auto integrationStart = Clock::now();
+  constraintSolver_.applySpringForces(world, springJoints_, mouseSpring_, dt,
+                                      settings_.enableRotationalDynamics);
+  integrate(world, dt);
+  profileStats_.integrationUs = std::chrono::duration<float, std::micro>(Clock::now() - integrationStart).count();
+
+  for (int iter = 0; iter < settings_.velocityIterations; ++iter) {
+    const auto constraintStart = Clock::now();
+    constraintSolver_.solveVelocityConstraints(world, distanceJoints_, dt, settings_.enableRotationalDynamics);
+    profileStats_.constraintSolverUs += std::chrono::duration<float, std::micro>(Clock::now() - constraintStart).count();
+    detectAndResolve(world, dt);
+  }
+  const auto positionStart = Clock::now();
+  for (int iter = 0; iter < settings_.positionIterations; ++iter) {
+    constraintSolver_.solvePositionConstraints(world, distanceJoints_);
+  }
+  profileStats_.constraintSolverUs += std::chrono::duration<float, std::micro>(Clock::now() - positionStart).count();
+  profileStats_.totalSubstepUs = std::chrono::duration<float, std::micro>(Clock::now() - start).count();
+  simulationTime_ += dt;
 }
 
 void PhysicsWorld::integrate(World& world, float dt) {
   for (auto& rec : world.entitiesMutable()) {
     if (!rec.active) continue;
-    integrateRigidBody(rec.rigidBody, rec.transform, settings_.gravity, dt);
+    integrateRigidBody(rec.rigidBody, rec.transform, settings_.gravity, dt, settings_.enableRotationalDynamics);
   }
 }
 
@@ -68,9 +101,11 @@ void PhysicsWorld::detectAndResolve(World& world, float dt) {
   std::vector<EntityId> ids;
   std::vector<glm::vec3> positions;
   std::vector<float> radii;
+  std::vector<glm::vec3> bounds;
   ids.reserve(records.size());
   positions.reserve(records.size());
   radii.reserve(records.size());
+  bounds.reserve(records.size());
 
   for (std::size_t i = 0; i < records.size(); ++i) {
     const auto& rec = records[i];
@@ -81,17 +116,25 @@ void PhysicsWorld::detectAndResolve(World& world, float dt) {
                   ? rec.collider.radius
                   : glm::length(rec.collider.halfExtents);
     radii.push_back(r);
+    glm::vec3 extent(r);
+    if (rec.collider.shape == ColliderShape::Box) {
+      const glm::mat3 rotation = glm::mat3_cast(rec.transform.rotation);
+      const auto& half = rec.collider.halfExtents;
+      extent = glm::abs(rotation[0]) * half.x + glm::abs(rotation[1]) * half.y +
+               glm::abs(rotation[2]) * half.z;
+    }
+    bounds.push_back(extent);
   }
 
   // Broadphase: Spatial Hash
   auto tBroadStart = std::chrono::high_resolution_clock::now();
   spatialHash_.clear();
   for (std::size_t i = 0; i < ids.size(); ++i) {
-    spatialHash_.insert(static_cast<EntityId>(i), positions[i], radii[i]);
+    spatialHash_.insertAabb(static_cast<EntityId>(i), positions[i] - bounds[i], positions[i] + bounds[i]);
   }
   auto pairs = spatialHash_.queryPairs(ids, positions, radii);
   auto tBroadEnd = std::chrono::high_resolution_clock::now();
-  profileStats_.broadphaseUs =
+  profileStats_.broadphaseUs +=
       std::chrono::duration<float, std::micro>(tBroadEnd - tBroadStart).count();
 
   // Narrowphase & Contact Resolution
@@ -134,12 +177,14 @@ void PhysicsWorld::detectAndResolve(World& world, float dt) {
     }
 
     // Resolve velocity impulse (Normal + Coulomb Friction + Rotational Torque)
-    resolveContact(recA.rigidBody, recA.transform, recB.rigidBody, recB.transform, *contact);
+    resolveContact(recA.rigidBody, recA.transform, recB.rigidBody, recB.transform, *contact,
+                   settings_.enableFriction, settings_.enableRotationalDynamics);
 
     // Position correction to prevent sinking/penetration
     const float slop = 0.003f;
     const float percent = 0.65f;
-    float invMassSum = recA.rigidBody.inverseMass + recB.rigidBody.inverseMass;
+    float invMassSum = (recA.rigidBody.isStatic ? 0.0f : recA.rigidBody.inverseMass) +
+                       (recB.rigidBody.isStatic ? 0.0f : recB.rigidBody.inverseMass);
     if (invMassSum > 0.0f) {
       glm::vec3 correction =
           contact->normal * (std::max(contact->penetration - slop, 0.0f) * percent / invMassSum);
@@ -149,7 +194,7 @@ void PhysicsWorld::detectAndResolve(World& world, float dt) {
   }
 
   auto tNarrowEnd = std::chrono::high_resolution_clock::now();
-  profileStats_.narrowphaseUs =
+  profileStats_.narrowphaseUs +=
       std::chrono::duration<float, std::micro>(tNarrowEnd - tNarrowStart).count();
 }
 

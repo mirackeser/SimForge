@@ -37,7 +37,7 @@ std::optional<ContactManifold> collideSphereSphere(const TransformComponent& a, 
     return std::nullopt;
   }
 
-  float dist = std::sqrt(std::max(distSq, 1e-8f));
+  float dist = std::sqrt(distSq);
   ContactManifold m;
   m.normal = dist > 1e-5f ? delta / dist : glm::vec3(0.0f, 1.0f, 0.0f);
   m.penetration = radiusSum - dist;
@@ -60,12 +60,12 @@ std::optional<ContactManifold> collideSphereBox(const TransformComponent& sphere
     return std::nullopt;
   }
 
-  float dist = std::sqrt(std::max(distSq, 1e-8f));
+  float dist = std::sqrt(distSq);
   ContactManifold m;
 
   if (dist > 1e-5f) {
     glm::vec3 localNormal = localDelta / dist;
-    m.normal = boxRot * localNormal;
+    m.normal = -(boxRot * localNormal);
     m.penetration = cs.radius - dist;
     m.point = box.position + boxRot * localClosest;
   } else {
@@ -85,8 +85,8 @@ std::optional<ContactManifold> collideSphereBox(const TransformComponent& sphere
       m.penetration = cs.radius + pen.z;
     }
 
-    m.normal = boxRot * localNormal;
-    m.point = sphere.position - m.normal * cs.radius;
+    m.normal = -(boxRot * localNormal);
+    m.point = box.position + boxRot * (localSpherePos + localNormal * glm::dot(pen, glm::abs(localNormal)));
   }
 
   return m;
@@ -165,28 +165,30 @@ std::optional<ContactManifold> collideBoxBox(const TransformComponent& a, const 
 
 void resolveContact(RigidBodyComponent& bodyA, TransformComponent& transformA,
                     RigidBodyComponent& bodyB, TransformComponent& transformB,
-                    const ContactManifold& contact) {
+                    const ContactManifold& contact, bool enableFriction, bool enableRotation) {
   if (bodyA.isStatic && bodyB.isStatic) return;
 
+  const float invMassA = bodyA.isStatic ? 0.0f : bodyA.inverseMass;
+  const float invMassB = bodyB.isStatic ? 0.0f : bodyB.inverseMass;
   glm::vec3 normal = contact.normal;
   glm::vec3 rA = contact.point - transformA.position;
   glm::vec3 rB = contact.point - transformB.position;
 
   // Point velocities including angular velocity: v_p = v + w x r
-  glm::vec3 vA_p = bodyA.velocity + (bodyA.isStatic ? glm::vec3(0.0f) : glm::cross(bodyA.angularVelocity, rA));
-  glm::vec3 vB_p = bodyB.velocity + (bodyB.isStatic ? glm::vec3(0.0f) : glm::cross(bodyB.angularVelocity, rB));
+  glm::vec3 vA_p = bodyA.velocity + ((bodyA.isStatic || !enableRotation) ? glm::vec3(0.0f) : glm::cross(bodyA.angularVelocity, rA));
+  glm::vec3 vB_p = bodyB.velocity + ((bodyB.isStatic || !enableRotation) ? glm::vec3(0.0f) : glm::cross(bodyB.angularVelocity, rB));
   glm::vec3 relativeVelocity = vB_p - vA_p;
 
   float velAlongNormal = glm::dot(relativeVelocity, normal);
   if (velAlongNormal > 0.0f) return;  // Objects separating
 
   // Angular mass terms along normal: (I^-1 (r x n)) x r
-  glm::vec3 angA_n = bodyA.isStatic ? glm::vec3(0.0f)
+  glm::vec3 angA_n = (bodyA.isStatic || !enableRotation) ? glm::vec3(0.0f)
                                     : glm::cross(bodyA.inverseInertiaTensorWorld * glm::cross(rA, normal), rA);
-  glm::vec3 angB_n = bodyB.isStatic ? glm::vec3(0.0f)
+  glm::vec3 angB_n = (bodyB.isStatic || !enableRotation) ? glm::vec3(0.0f)
                                     : glm::cross(bodyB.inverseInertiaTensorWorld * glm::cross(rB, normal), rB);
 
-  float invMassNormal = bodyA.inverseMass + bodyB.inverseMass + glm::dot(normal, angA_n + angB_n);
+  float invMassNormal = invMassA + invMassB + glm::dot(normal, angA_n + angB_n);
   if (invMassNormal <= 0.0f) return;
 
   float restitution = std::min(bodyA.restitution, bodyB.restitution);
@@ -198,29 +200,31 @@ void resolveContact(RigidBodyComponent& bodyA, TransformComponent& transformA,
   // Apply normal impulse
   if (!bodyA.isStatic) {
     bodyA.velocity -= normalImpulse * bodyA.inverseMass;
-    bodyA.angularVelocity -= bodyA.inverseInertiaTensorWorld * glm::cross(rA, normalImpulse);
+    if (enableRotation) bodyA.angularVelocity -= bodyA.inverseInertiaTensorWorld * glm::cross(rA, normalImpulse);
   }
   if (!bodyB.isStatic) {
     bodyB.velocity += normalImpulse * bodyB.inverseMass;
-    bodyB.angularVelocity += bodyB.inverseInertiaTensorWorld * glm::cross(rB, normalImpulse);
+    if (enableRotation) bodyB.angularVelocity += bodyB.inverseInertiaTensorWorld * glm::cross(rB, normalImpulse);
   }
+
+  if (!enableFriction) return;
 
   // Coulomb Friction Model:
   // Recompute relative velocity at contact point after normal impulse
-  vA_p = bodyA.velocity + (bodyA.isStatic ? glm::vec3(0.0f) : glm::cross(bodyA.angularVelocity, rA));
-  vB_p = bodyB.velocity + (bodyB.isStatic ? glm::vec3(0.0f) : glm::cross(bodyB.angularVelocity, rB));
+  vA_p = bodyA.velocity + ((bodyA.isStatic || !enableRotation) ? glm::vec3(0.0f) : glm::cross(bodyA.angularVelocity, rA));
+  vB_p = bodyB.velocity + ((bodyB.isStatic || !enableRotation) ? glm::vec3(0.0f) : glm::cross(bodyB.angularVelocity, rB));
   relativeVelocity = vB_p - vA_p;
 
   glm::vec3 tangent = relativeVelocity - glm::dot(relativeVelocity, normal) * normal;
   float tangentLen = glm::length(tangent);
   if (tangentLen > 1e-5f) {
     tangent /= tangentLen;
-    glm::vec3 angA_t = bodyA.isStatic ? glm::vec3(0.0f)
+    glm::vec3 angA_t = (bodyA.isStatic || !enableRotation) ? glm::vec3(0.0f)
                                       : glm::cross(bodyA.inverseInertiaTensorWorld * glm::cross(rA, tangent), rA);
-    glm::vec3 angB_t = bodyB.isStatic ? glm::vec3(0.0f)
+    glm::vec3 angB_t = (bodyB.isStatic || !enableRotation) ? glm::vec3(0.0f)
                                       : glm::cross(bodyB.inverseInertiaTensorWorld * glm::cross(rB, tangent), rB);
 
-    float invMassTangent = bodyA.inverseMass + bodyB.inverseMass + glm::dot(tangent, angA_t + angB_t);
+    float invMassTangent = invMassA + invMassB + glm::dot(tangent, angA_t + angB_t);
     if (invMassTangent > 0.0f) {
       float jt = -glm::dot(relativeVelocity, tangent) / invMassTangent;
 
@@ -236,11 +240,11 @@ void resolveContact(RigidBodyComponent& bodyA, TransformComponent& transformA,
       glm::vec3 frictionImpulse = jt * tangent;
       if (!bodyA.isStatic) {
         bodyA.velocity -= frictionImpulse * bodyA.inverseMass;
-        bodyA.angularVelocity -= bodyA.inverseInertiaTensorWorld * glm::cross(rA, frictionImpulse);
+        if (enableRotation) bodyA.angularVelocity -= bodyA.inverseInertiaTensorWorld * glm::cross(rA, frictionImpulse);
       }
       if (!bodyB.isStatic) {
         bodyB.velocity += frictionImpulse * bodyB.inverseMass;
-        bodyB.angularVelocity += bodyB.inverseInertiaTensorWorld * glm::cross(rB, frictionImpulse);
+        if (enableRotation) bodyB.angularVelocity += bodyB.inverseInertiaTensorWorld * glm::cross(rB, frictionImpulse);
       }
     }
   }
@@ -255,8 +259,8 @@ void resolveContact(RigidBodyComponent& bodyA, RigidBodyComponent& bodyB, const 
 }
 
 void integrateRigidBody(RigidBodyComponent& body, TransformComponent& transform, const glm::vec3& gravity,
-                        float dt) {
-  if (body.isStatic) {
+                        float dt, bool enableRotation) {
+  if (body.isStatic || body.inverseMass <= 0.0f) {
     return;
   }
 
@@ -266,6 +270,8 @@ void integrateRigidBody(RigidBodyComponent& body, TransformComponent& transform,
   }
   body.velocity *= std::max(0.0f, 1.0f - body.linearDamping);
   transform.position += body.velocity * dt;
+
+  if (!enableRotation) return;
 
   // Angular integration
   body.angularVelocity *= std::max(0.0f, 1.0f - body.angularDamping);

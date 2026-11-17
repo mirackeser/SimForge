@@ -39,9 +39,12 @@ struct MouseSpring {
 
 class ConstraintSolver {
  public:
+  // Apply spring forces once per fixed substep, before integration.
+  void applySpringForces(World& world, const std::vector<SpringJoint>& springJoints,
+                        const MouseSpring& mouseSpring, float dt, bool enableRotation = true);
+
   void solveVelocityConstraints(World& world, const std::vector<DistanceJoint>& distanceJoints,
-                                const std::vector<SpringJoint>& springJoints, const MouseSpring& mouseSpring,
-                                float dt);
+                                float dt, bool enableRotation = true);
 
   void solvePositionConstraints(World& world, const std::vector<DistanceJoint>& distanceJoints);
 };

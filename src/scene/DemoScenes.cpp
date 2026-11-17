@@ -81,7 +81,7 @@ const char* demoSceneName(DemoScene scene) {
 
 void loadDemoScene(World& world, PhysicsWorld& physics, DemoScene scene) {
   world.clear();
-  physics.clearJoints();
+  physics.reset();
   buildGround(world);
 
   switch (scene) {

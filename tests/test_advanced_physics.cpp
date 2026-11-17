@@ -170,11 +170,9 @@ TEST(AdvancedPhysics, DistanceConstraintSolvesLength) {
   joint.stiffness = 1.0f;
 
   std::vector<DistanceJoint> joints = {joint};
-  std::vector<SpringJoint> springs;
-  MouseSpring ms;
 
   // Velocity constraint should eliminate downward velocity
-  solver.solveVelocityConstraints(world, joints, springs, ms, 1.0f / 60.0f);
+  solver.solveVelocityConstraints(world, joints, 1.0f / 60.0f);
   EXPECT_NEAR(rbB->velocity.y, 0.0f, 0.1f);
 }
 

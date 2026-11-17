@@ -5,9 +5,12 @@ on:
     branches: [main, master]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   build-and-test:
-    name: Build & Test (${{ matrix.os }})
+    name: Desktop & Tests (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
@@ -15,18 +18,35 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-
       - name: Install Linux Dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libx11-dev libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev libgl1-mesa-dev
-
       - name: Configure CMake
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-
       - name: Build
-        run: cmake --build build --config Release
+        run: cmake --build build --config Release --parallel 2
+      - name: Run Tests
+        run: ctest --test-dir build -C Release --output-on-failure --no-tests=error
 
-      - name: Run Unit Tests
-        run: ctest --test-dir build -C Release --output-on-failure
+  headless-sanitizers:
+    name: Headless & Sanitizers (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure Without Graphics
+        run: >-
+          cmake -S . -B build -DSIMFORGE_BUILD_SANDBOX=OFF -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
+          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+      - name: Build
+        run: cmake --build build --parallel 2
+      - name: Run Tests
+        run: ctest --test-dir build --output-on-failure --no-tests=error
+      - name: Export a Scene Trace
+        run: ./build/SimForgeHeadless --scene cradle --steps 30 --csv trace.csv
+      - uses: actions/upload-artifact@v4
+        with:
+          name: headless-cradle-trace
+          path: trace.csv

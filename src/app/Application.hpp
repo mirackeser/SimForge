@@ -31,6 +31,7 @@ class Application {
 
   DemoScene activeScene_{DemoScene::DominoStack};
   bool paused_{false};
+  bool spaceWasPressed_{false};
   bool stepOnce_{false};
   double lastFrameTime_{0.0};
   float fpsSmoothed_{0.0f};

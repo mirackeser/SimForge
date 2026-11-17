@@ -9,6 +9,7 @@
 namespace simforge {
 
 struct ContactManifold {
+  // Normal points from shape A toward shape B; resolution moves A against it.
   glm::vec3 normal{0.0f, 1.0f, 0.0f};
   float penetration{0.0f};
   glm::vec3 point{0.0f};
@@ -42,12 +43,12 @@ std::optional<ContactManifold> collideBoxBox(const TransformComponent& a, const 
 
 void resolveContact(RigidBodyComponent& bodyA, TransformComponent& transformA,
                     RigidBodyComponent& bodyB, TransformComponent& transformB,
-                    const ContactManifold& contact);
+                    const ContactManifold& contact, bool enableFriction = true, bool enableRotation = true);
 
 void resolveContact(RigidBodyComponent& bodyA, RigidBodyComponent& bodyB, const ContactManifold& contact);
 
 void integrateRigidBody(RigidBodyComponent& body, TransformComponent& transform, const glm::vec3& gravity,
-                        float dt);
+                        float dt, bool enableRotation = true);
 
 bool intersectRaySphere(const Ray& ray, const glm::vec3& center, float radius, float& tHit, glm::vec3& hitNormal);
 

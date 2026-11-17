@@ -1,16 +1,27 @@
 #include "physics/SpatialHash.hpp"
 
 #include <unordered_set>
+#include <algorithm>
+#include <cmath>
+#include <stdexcept>
 
 namespace simforge {
 
-SpatialHash::SpatialHash(float cellSize) : cellSize_(cellSize) {}
+SpatialHash::SpatialHash(float cellSize) : cellSize_(cellSize) {
+  if (!std::isfinite(cellSize) || cellSize <= 0.0f) {
+    throw std::invalid_argument("Spatial cell size must be finite and positive");
+  }
+}
 
 void SpatialHash::clear() { grid_.clear(); }
 
 void SpatialHash::insert(EntityId id, const glm::vec3& position, float radius) {
-  glm::ivec3 minCell = cellCoord(position - glm::vec3(radius));
-  glm::ivec3 maxCell = cellCoord(position + glm::vec3(radius));
+  insertAabb(id, position - glm::vec3(radius), position + glm::vec3(radius));
+}
+
+void SpatialHash::insertAabb(EntityId id, const glm::vec3& minimum, const glm::vec3& maximum) {
+  glm::ivec3 minCell = cellCoord(minimum);
+  glm::ivec3 maxCell = cellCoord(maximum);
   for (int x = minCell.x; x <= maxCell.x; ++x) {
     for (int y = minCell.y; y <= maxCell.y; ++y) {
       for (int z = minCell.z; z <= maxCell.z; ++z) {
@@ -36,6 +47,7 @@ std::vector<CollisionPair> SpatialHash::queryPairs(const std::vector<EntityId>& 
       for (std::size_t j = i + 1; j < cellIds.size(); ++j) {
         EntityId a = cellIds[i];
         EntityId b = cellIds[j];
+        if (a > b) std::swap(a, b);
         auto key = pairKey(a, b);
         if (seen.count(key)) continue;
         seen.insert(key);
@@ -49,6 +61,9 @@ std::vector<CollisionPair> SpatialHash::queryPairs(const std::vector<EntityId>& 
     }
   }
 
+  std::sort(pairs.begin(), pairs.end(), [](const CollisionPair& a, const CollisionPair& b) {
+    return a.a < b.a || (a.a == b.a && a.b < b.b);
+  });
   (void)ids;
   return pairs;
 }

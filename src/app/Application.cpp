@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <iostream>
 #include <random>
+#include <limits>
 
 namespace simforge {
 
@@ -24,6 +25,9 @@ bool Application::init() {
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+#ifdef __APPLE__
+  glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
+#endif
 
   window_ = glfwCreateWindow(1360, 780, "SimForge — Advanced Real-Time Physics Sandbox", nullptr, nullptr);
   if (!window_) {
@@ -128,10 +132,17 @@ void Application::spawnRandomBox() {
 
 void Application::handleMousePicking() {
   ImGuiIO& io = ImGui::GetIO();
+  // Always release the spring, even when the pointer has entered an ImGui panel.
+  if (glfwGetMouseButton(window_, GLFW_MOUSE_BUTTON_LEFT) == GLFW_RELEASE) {
+    isDraggingEntity_ = false;
+    physics_.mouseSpring().active = false;
+  }
   if (io.WantCaptureMouse) return;
 
+  // GLFW cursor positions are in window coordinates, including on Retina displays.
   int fbW, fbH;
-  glfwGetFramebufferSize(window_, &fbW, &fbH);
+  glfwGetWindowSize(window_, &fbW, &fbH);
+  if (fbW <= 0 || fbH <= 0) return;
 
   double mouseX, mouseY;
   glfwGetCursorPos(window_, &mouseX, &mouseY);
@@ -204,6 +215,13 @@ void Application::processInput(float dt) {
     glfwSetWindowShouldClose(window_, true);
   }
 
+  const bool spacePressed = glfwGetKey(window_, GLFW_KEY_SPACE) == GLFW_PRESS;
+  if (spacePressed && !spaceWasPressed_ && !ImGui::GetIO().WantCaptureKeyboard) {
+    paused_ = !paused_;
+    physics_.resetAccumulatedTime();
+  }
+  spaceWasPressed_ = spacePressed;
+
   handleMousePicking();
 
   // Camera Orbit with Right Mouse Button
@@ -257,21 +275,26 @@ void Application::drawUi() {
     activeScene_ = static_cast<DemoScene>(sceneIndex);
     loadDemoScene(world_, physics_, activeScene_);
     selectedEntity_ = kInvalidEntity;
-    physics_.resetAccumulatedTime();
+    isDraggingEntity_ = false;
+    stepOnce_ = false;
   }
 
   // Simulation State Controls
   if (ImGui::Button(paused_ ? "  Resume (Space)  " : "  Pause (Space)  ")) {
     paused_ = !paused_;
+    physics_.resetAccumulatedTime();
   }
   ImGui::SameLine();
   if (ImGui::Button("Step Frame")) {
+    paused_ = true;
     stepOnce_ = true;
   }
   ImGui::SameLine();
   if (ImGui::Button("Reset Scene")) {
     loadDemoScene(world_, physics_, activeScene_);
     selectedEntity_ = kInvalidEntity;
+    isDraggingEntity_ = false;
+    stepOnce_ = false;
   }
 
   ImGui::Spacing();
@@ -297,6 +320,8 @@ void Application::drawUi() {
 
     ImGui::SliderInt("Velocity Iterations", &settings.velocityIterations, 1, 20);
     ImGui::SliderInt("Position Iterations", &settings.positionIterations, 1, 10);
+    ImGui::Checkbox("Friction", &settings.enableFriction);
+    ImGui::Checkbox("Rotational Dynamics", &settings.enableRotationalDynamics);
   }
 
   // Visual Overlays
@@ -377,9 +402,12 @@ int Application::run() {
     glfwPollEvents();
     processInput(dt);
 
-    if (!paused_ || stepOnce_) {
-      physics_.step(world_, dt);
+    if (stepOnce_) {
+      physics_.resetAccumulatedTime();
+      physics_.stepFixed(world_);
       stepOnce_ = false;
+    } else if (!paused_) {
+      physics_.step(world_, dt);
     }
 
     int fbW, fbH;
@@ -401,9 +429,9 @@ int Application::run() {
       renderer_.drawSpatialHashCells(physics_.spatialHash(), physics_.spatialHash().cellSize());
     }
 
-    renderer_.endFrame();
-
+    renderer_.flushLines();
     drawUi();
+    renderer_.endFrame();
   }
 
   shutdown();
